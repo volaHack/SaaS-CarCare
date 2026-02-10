@@ -1,0 +1,30 @@
+# Gradle files
+.gradle/
+build/
+app/build/
+local.properties
+
+# Android Studio
+.idea/
+.vscode/
+*.iml
+
+# Node/Frontend
+node_modules/
+.next/
+out/
+coverage/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+.env.production
