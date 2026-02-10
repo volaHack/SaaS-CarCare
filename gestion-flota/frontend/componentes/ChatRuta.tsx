@@ -16,7 +16,7 @@ interface ChatProps {
     rol: "ADMIN" | "CONDUCTOR";
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production.up.railway.app";
 
 export default function ChatRuta({ rutaId, rol }: ChatProps) {
     const [mensajes, setMensajes] = useState<Mensaje[]>([]);
@@ -48,8 +48,8 @@ export default function ChatRuta({ rutaId, rol }: ChatProps) {
                 headers: getAuthHeaders() as any
             });
             if (res.ok) setMensajes(await res.json());
-        } catch (err) {
-            console.error("Error cargando chat:", err);
+        } catch {
+            // Silenciar errores de polling para no llenar la consola
         }
     };
 

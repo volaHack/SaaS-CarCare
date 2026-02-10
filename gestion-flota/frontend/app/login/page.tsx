@@ -73,6 +73,15 @@ export default function LoginPage() {
         <main className={styles.mainContainer}>
             {/* Visual Panel (Left) */}
             <div className={styles.visualPanel}>
+                <div className={styles.bgImageContainer}>
+                    <img
+                        src="/login-bg.jpg"
+                        alt="Fondo"
+                        className={styles.bgImage}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                </div>
+
                 <div className={styles.visualContent}>
                     <div className={styles.brandLogo}>
                         <CarIcon />

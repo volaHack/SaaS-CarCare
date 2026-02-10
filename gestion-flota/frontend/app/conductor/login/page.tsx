@@ -125,7 +125,16 @@ export default function DriverLoginPage() {
     return (
         <main className={styles.mainContainer}>
             {/* Panel Visual */}
-            <div className={styles.visualPanel} style={{ background: 'linear-gradient(135deg, #0f172a 0%, #000 100%)' }}>
+            <div className={styles.visualPanel}>
+                <div className={styles.bgImageContainer}>
+                    <img
+                        src="/login-bg.jpg"
+                        alt="Fondo"
+                        className={styles.bgImage}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                </div>
+
                 <div className={styles.visualContent}>
                     <div className={styles.brandLogo}>
                         <CarIcon />
@@ -146,6 +155,8 @@ export default function DriverLoginPage() {
                         </div>
                     </div>
                 </div>
+                {/* Overlay pattern for readability */}
+                <div className={styles.visualPattern} />
             </div>
 
             {/* Panel Formulario */}
