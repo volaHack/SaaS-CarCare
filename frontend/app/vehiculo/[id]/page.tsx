@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { toast } from "sonner";
 import BackgroundMeteors from "@/componentes/BackgroundMeteors";
-import styles from "../../page.module.css";
+import styles from "../../dashboard/page.module.css";
 
 interface Vehiculo {
   id: string;

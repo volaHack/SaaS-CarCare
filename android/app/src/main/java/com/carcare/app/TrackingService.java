@@ -103,20 +103,21 @@ public class TrackingService extends Service {
         
         new Thread(() -> {
             try {
-                URL url = new URL(API_URL + "/api/rutas/" + rutaId);
+                // Usar endpoint dedicado de GPS que calcula velocidad y distancia restante
+                URL url = new URL(API_URL + "/api/rutas/" + rutaId + "/gps");
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("PUT");
+                conn.setRequestMethod("POST");
                 conn.setRequestProperty("Content-Type", "application/json");
                 conn.setDoOutput(true);
                 conn.setConnectTimeout(5000);
                 conn.setReadTimeout(5000);
 
                 String jsonInputString = String.format(
-                    "{\"latitudActual\": %f, \"longitudActual\": %f, \"estado\": \"EN_CURSO\"}",
+                    "{\"latitud\": %f, \"longitud\": %f}",
                     location.getLatitude(), location.getLongitude()
                 );
 
-                Log.d(TAG, "Enviando ubicación al backend: " + API_URL + "/api/rutas/" + rutaId);
+                Log.d(TAG, "Enviando GPS al backend: " + API_URL + "/api/rutas/" + rutaId + "/gps");
 
                 try (OutputStream os = conn.getOutputStream()) {
                     byte[] input = jsonInputString.getBytes(StandardCharsets.UTF_8);
@@ -125,13 +126,13 @@ public class TrackingService extends Service {
 
                 int responseCode = conn.getResponseCode();
                 if (responseCode == 200) {
-                    Log.d(TAG, "✓ Ubicación enviada correctamente al backend");
+                    Log.d(TAG, "✓ GPS enviado correctamente - velocidad y distancia calculadas");
                 } else {
                     Log.w(TAG, "⚠ Respuesta del servidor: " + responseCode);
                 }
                 conn.disconnect();
             } catch (Exception e) {
-                Log.e(TAG, "✗ Error enviando ubicación al backend: " + e.getMessage(), e);
+                Log.e(TAG, "✗ Error enviando GPS al backend: " + e.getMessage(), e);
             }
         }).start();
     }

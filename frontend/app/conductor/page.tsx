@@ -142,14 +142,14 @@ export default function ConductorDashboard() {
             async (position) => {
                 toast.success(`GPS encontrado: ${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`);
 
-                // Actualizar posición inicial inmediatamente
+                // Actualizar posición inicial inmediatamente usando endpoint GPS dedicado
                 try {
-                    await fetch(`${API_URL}/api/rutas/${rutaId}`, {
-                        method: 'PUT',
+                    await fetch(`${API_URL}/api/rutas/${rutaId}/gps`, {
+                        method: 'POST',
                         headers: getAuthHeaders(),
                         body: JSON.stringify({
-                            latitudActual: position.coords.latitude,
-                            longitudActual: position.coords.longitude
+                            latitud: position.coords.latitude,
+                            longitud: position.coords.longitude
                         })
                     });
                 } catch (err) {
@@ -161,12 +161,12 @@ export default function ConductorDashboard() {
                     async (position) => {
                         console.log(`GPS Update: ${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`);
                         try {
-                            await fetch(`${API_URL}/api/rutas/${rutaId}`, {
-                                method: 'PUT',
+                            await fetch(`${API_URL}/api/rutas/${rutaId}/gps`, {
+                                method: 'POST',
                                 headers: getAuthHeaders(),
                                 body: JSON.stringify({
-                                    latitudActual: position.coords.latitude,
-                                    longitudActual: position.coords.longitude
+                                    latitud: position.coords.latitude,
+                                    longitud: position.coords.longitude
                                 })
                             });
                         } catch (err) {

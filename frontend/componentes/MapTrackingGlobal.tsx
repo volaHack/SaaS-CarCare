@@ -1,6 +1,6 @@
 "use client";
 
-import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo } from "react";
@@ -232,117 +232,8 @@ export default function MapTrackingGlobal({ rutasActivas, onRutaClick }: MapTrac
                         key={ruta.id}
                         position={position}
                         icon={icon}
-                        eventHandlers={{
-                            click: () => ruta.id && onRutaClick && onRutaClick(ruta.id)
-                        }}
                     >
-                        {/* Tooltip que aparece al hacer hover */}
-                        <Tooltip
-                            permanent={false}
-                            direction="top"
-                            offset={[0, -15]}
-                            opacity={0.98}
-                            className="custom-tooltip"
-                        >
-                            <div style={{
-                                minWidth: '200px',
-                                padding: '8px',
-                                fontSize: '0.8rem',
-                                lineHeight: '1.5',
-                                background: 'white',
-                                borderRadius: '8px',
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-                            }}>
-                                {/* Estado con badge */}
-                                <div style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    marginBottom: '8px',
-                                    paddingBottom: '8px',
-                                    borderBottom: `2px solid ${statusColors[timeAgo.status]}`
-                                }}>
-                                    <div style={{
-                                        fontWeight: 'bold',
-                                        color: '#1f2937',
-                                        fontSize: '0.9rem'
-                                    }}>
-                                        {ruta.estado === 'EN_CURSO' ? '🚗 Conductor' : '📍 En Espera'}
-                                    </div>
-                                    <div style={{
-                                        padding: '2px 8px',
-                                        borderRadius: '12px',
-                                        background: statusColors[timeAgo.status],
-                                        color: 'white',
-                                        fontSize: '0.7rem',
-                                        fontWeight: 'bold',
-                                        textTransform: 'uppercase'
-                                    }}>
-                                        {timeAgo.status === 'online' ? 'ONLINE' :
-                                            timeAgo.status === 'idle' ? 'INACTIVO' : 'OFFLINE'}
-                                    </div>
-                                </div>
-
-                                {/* Ruta */}
-                                <div style={{
-                                    color: '#374151',
-                                    marginBottom: '6px',
-                                    fontSize: '0.85rem'
-                                }}>
-                                    <strong>{ruta.origen}</strong>
-                                    <span style={{ margin: '0 4px', color: '#9ca3af' }}>→</span>
-                                    <strong>{ruta.destino}</strong>
-                                </div>
-
-                                {/* Timestamp info */}
-                                <div style={{
-                                    marginTop: '8px',
-                                    padding: '6px 8px',
-                                    background: `${statusColors[timeAgo.status]}10`,
-                                    borderRadius: '6px',
-                                    borderLeft: `3px solid ${statusColors[timeAgo.status]}`
-                                }}>
-                                    <div style={{
-                                        fontSize: '0.75rem',
-                                        color: '#6b7280',
-                                        marginBottom: '2px'
-                                    }}>
-                                        📡 Última señal GPS
-                                    </div>
-                                    <div style={{
-                                        fontSize: '0.85rem',
-                                        fontWeight: 'bold',
-                                        color: statusColors[timeAgo.status]
-                                    }}>
-                                        {timeAgo.text}
-                                    </div>
-                                    {ruta.ultimaActualizacionGPS && (
-                                        <div style={{
-                                            fontSize: '0.7rem',
-                                            color: '#9ca3af',
-                                            marginTop: '2px'
-                                        }}>
-                                            🕐 {formatTimestamp(ruta.ultimaActualizacionGPS)}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Indicador de GPS activo */}
-                                {hasRealGPS && (
-                                    <div style={{
-                                        marginTop: '6px',
-                                        fontSize: '0.7rem',
-                                        color: '#22c55e',
-                                        textAlign: 'center',
-                                        fontWeight: '600'
-                                    }}>
-                                        ✓ GPS Conectado
-                                    </div>
-                                )}
-                            </div>
-                        </Tooltip>
-
-                        {/* Popup con más detalles al hacer click */}
+                        {/* Popup con detalles al hacer click */}
                         <Popup>
                             <div style={{ color: '#000', minWidth: '220px' }}>
                                 {/* Header con estado */}

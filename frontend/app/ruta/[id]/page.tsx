@@ -30,6 +30,38 @@ interface Ruta {
     desviado: boolean;
     velocidadActualKmh?: number;
     distanciaRestanteKm?: number;
+    ultimaActualizacionGPS?: string;
+}
+
+// Helper: calcular tiempo desde última actualización GPS
+function getGPSConnectionStatus(timestamp?: string): { label: string; color: string; isConnected: boolean; secondsAgo: number } {
+    if (!timestamp) return { label: 'Sin señal', color: '#6b7280', isConnected: false, secondsAgo: Infinity };
+    const diffMs = Date.now() - new Date(timestamp).getTime();
+    const seconds = Math.floor(diffMs / 1000);
+    if (seconds <= 15) return { label: 'Conectado', color: '#22c55e', isConnected: true, secondsAgo: seconds };
+    if (seconds <= 60) return { label: `Hace ${seconds}s`, color: '#f59e0b', isConnected: true, secondsAgo: seconds };
+    if (seconds <= 300) return { label: `Hace ${Math.floor(seconds / 60)} min`, color: '#f59e0b', isConnected: false, secondsAgo: seconds };
+    return { label: 'Desconectado', color: '#ef4444', isConnected: false, secondsAgo: seconds };
+}
+
+// Helper: calcular ETA
+function calcularETA(distanciaKm?: number, velocidadKmh?: number): string {
+    if (!distanciaKm || !velocidadKmh || velocidadKmh < 1) return '--';
+    const horas = distanciaKm / velocidadKmh;
+    const minutos = Math.round(horas * 60);
+    if (minutos < 1) return '< 1 min';
+    if (minutos < 60) return `${minutos} min`;
+    const h = Math.floor(minutos / 60);
+    const m = minutos % 60;
+    return m > 0 ? `${h}h ${m}min` : `${h}h`;
+}
+
+// Helper: calcular progreso real
+function calcularProgreso(distanciaTotal?: number, distanciaRestante?: number): number {
+    if (!distanciaTotal || distanciaTotal <= 0) return 0;
+    if (!distanciaRestante && distanciaRestante !== 0) return 0;
+    const progreso = ((distanciaTotal - distanciaRestante) / distanciaTotal) * 100;
+    return Math.max(0, Math.min(100, progreso));
 }
 
 const API_URL = typeof window !== 'undefined' && window.location.hostname === '10.0.2.2'
@@ -412,20 +444,41 @@ export default function RutaTracking() {
                                 </div>
                             )}
 
-                            {/* Timeline */}
-                            <div className={styles.card} style={{ padding: '1.5rem', background: 'rgba(0,0,0,0.2)' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                                    <span style={{ fontSize: '0.8rem', color: '#6b7280', fontWeight: '600' }}>PROGRESS TRACKER</span>
-                                    <span style={{ fontSize: '0.8rem', color: 'var(--accent)', fontWeight: '700' }}>65% COMPLETE</span>
-                                </div>
-                                <div style={{ height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden', position: 'relative' }}>
-                                    <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: '65%', background: 'linear-gradient(to right, var(--accent), #3bf63b)', borderRadius: '4px', boxShadow: '0 0 15px var(--accent)' }}></div>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.8rem', fontSize: '0.75rem', color: '#4b5563' }}>
-                                    <span>SALIDA: {ruta.origen}</span>
-                                    <span>LLEGADA ESTIMADA: 45 MIN</span>
-                                </div>
-                            </div>
+                            {/* Timeline - Datos Reales */}
+                            {(() => {
+                                const progreso = calcularProgreso(ruta.distanciaEstimadaKm, ruta.distanciaRestanteKm);
+                                const eta = calcularETA(ruta.distanciaRestanteKm, ruta.velocidadActualKmh);
+                                return (
+                                    <div className={styles.card} style={{ padding: '1.5rem', background: 'rgba(0,0,0,0.2)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                                            <span style={{ fontSize: '0.8rem', color: '#6b7280', fontWeight: '600' }}>PROGRESS TRACKER</span>
+                                            <span style={{ fontSize: '0.8rem', color: 'var(--accent)', fontWeight: '700' }}>
+                                                {ruta.estado === 'EN_CURSO' && ruta.latitudActual ? `${progreso.toFixed(0)}%` : ruta.estado === 'EN_CURSO' ? 'ESPERANDO GPS' : 'SIN INICIAR'}
+                                            </span>
+                                        </div>
+                                        <div style={{ height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden', position: 'relative' }}>
+                                            <div style={{
+                                                position: 'absolute', left: 0, top: 0, height: '100%',
+                                                width: `${progreso}%`,
+                                                background: progreso >= 90 ? 'linear-gradient(to right, #22c55e, #3bf63b)' : 'linear-gradient(to right, var(--accent), #3bf63b)',
+                                                borderRadius: '4px',
+                                                boxShadow: '0 0 15px var(--accent)',
+                                                transition: 'width 1s ease-out'
+                                            }}></div>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.8rem', fontSize: '0.75rem', color: '#4b5563' }}>
+                                            <span>SALIDA: {ruta.origen}</span>
+                                            <span>ETA: {eta}</span>
+                                        </div>
+                                        {ruta.distanciaEstimadaKm > 0 && ruta.distanciaRestanteKm !== undefined && (
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem', fontSize: '0.7rem', color: '#374151' }}>
+                                                <span>{(ruta.distanciaEstimadaKm - (ruta.distanciaRestanteKm || 0)).toFixed(1)} km recorridos</span>
+                                                <span>{ruta.distanciaEstimadaKm.toFixed(1)} km totales</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                         </div>
 
                         {/* Sidebar Stats */}
@@ -446,51 +499,111 @@ export default function RutaTracking() {
                                     </div>
                                 )}
 
-                                <div style={{ display: 'grid', gap: '1rem' }}>
-                                    {/* Velocidad Actual - DATOS REALES */}
-                                    <div style={{ padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.03)' }}>
-                                        <span style={{ display: 'block', fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.4rem' }}>Velocidad Actual</span>
-                                        <span style={{ fontSize: '1.5rem', fontWeight: '800', color: '#fff' }}>
-                                            {ruta.velocidadActualKmh !== undefined && ruta.velocidadActualKmh !== null
-                                                ? ruta.velocidadActualKmh.toFixed(0)
-                                                : '--'}
-                                            {' '}
-                                            <span style={{ fontSize: '0.8rem', color: '#4b5563' }}>KM/H</span>
-                                        </span>
-                                        {ruta.velocidadActualKmh === 0 && (
-                                            <div style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '0.3rem' }}>
-                                                🟡 Vehículo detenido
+                                {(() => {
+                                    const gpsStatus = getGPSConnectionStatus(ruta.ultimaActualizacionGPS);
+                                    const velocidad = ruta.velocidadActualKmh;
+                                    const velocidadColor = !velocidad && velocidad !== 0 ? '#4b5563'
+                                        : velocidad === 0 ? '#f59e0b'
+                                        : velocidad > 120 ? '#ef4444'
+                                        : velocidad > 80 ? '#f59e0b'
+                                        : '#22c55e';
+                                    const distRestante = ruta.distanciaRestanteKm;
+                                    
+                                    return (
+                                        <div style={{ display: 'grid', gap: '1rem' }}>
+                                            {/* Velocidad Actual */}
+                                            <div style={{ padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', border: `1px solid ${velocidadColor}20` }}>
+                                                <span style={{ display: 'block', fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.4rem' }}>Velocidad Actual</span>
+                                                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
+                                                    <span style={{ fontSize: '2rem', fontWeight: '800', color: velocidadColor, transition: 'color 0.5s ease' }}>
+                                                        {velocidad !== undefined && velocidad !== null
+                                                            ? velocidad.toFixed(0)
+                                                            : '--'}
+                                                    </span>
+                                                    <span style={{ fontSize: '0.8rem', color: '#4b5563' }}>KM/H</span>
+                                                </div>
+                                                {velocidad !== undefined && velocidad !== null && (
+                                                    <div style={{ marginTop: '0.5rem' }}>
+                                                        <div style={{ height: '3px', background: 'rgba(255,255,255,0.05)', borderRadius: '2px', overflow: 'hidden' }}>
+                                                            <div style={{
+                                                                height: '100%',
+                                                                width: `${Math.min((velocidad / 150) * 100, 100)}%`,
+                                                                background: `linear-gradient(to right, #22c55e, ${velocidadColor})`,
+                                                                borderRadius: '2px',
+                                                                transition: 'width 1s ease-out'
+                                                            }}></div>
+                                                        </div>
+                                                        <div style={{ fontSize: '0.65rem', color: '#4b5563', marginTop: '0.3rem' }}>
+                                                            {velocidad === 0 ? '🟡 Vehículo detenido' :
+                                                             velocidad > 120 ? '🔴 Velocidad excesiva' :
+                                                             velocidad > 80 ? '🟡 Velocidad alta' :
+                                                             '🟢 Velocidad normal'}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
-                                        )}
-                                    </div>
 
-                                    {/* Distancia Restante - DATOS REALES */}
-                                    <div style={{ padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.03)' }}>
-                                        <span style={{ display: 'block', fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.4rem' }}>Distancia Restante</span>
-                                        <span style={{ fontSize: '1.5rem', fontWeight: '800', color: '#fff' }}>
-                                            {ruta.distanciaRestanteKm !== undefined && ruta.distanciaRestanteKm !== null
-                                                ? ruta.distanciaRestanteKm.toFixed(1)
-                                                : (ruta.latitudActual && ruta.latitudDestino
-                                                    ? ruta.distanciaEstimadaKm.toFixed(1)
-                                                    : '--')}
-                                            {' '}
-                                            <span style={{ fontSize: '0.8rem', color: '#4b5563' }}>KM</span>
-                                        </span>
-                                        {ruta.distanciaRestanteKm !== undefined && ruta.distanciaRestanteKm < 1 && (
-                                            <div style={{ fontSize: '0.7rem', color: '#22c55e', marginTop: '0.3rem' }}>
-                                                🎯 Llegando al destino
+                                            {/* Distancia Restante */}
+                                            <div style={{ padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                                                <span style={{ display: 'block', fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.4rem' }}>Distancia Restante</span>
+                                                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
+                                                    <span style={{ fontSize: '2rem', fontWeight: '800', color: '#fff', transition: 'all 0.5s ease' }}>
+                                                        {distRestante !== undefined && distRestante !== null
+                                                            ? distRestante.toFixed(1)
+                                                            : (ruta.latitudActual && ruta.latitudDestino
+                                                                ? ruta.distanciaEstimadaKm.toFixed(1)
+                                                                : '--')}
+                                                    </span>
+                                                    <span style={{ fontSize: '0.8rem', color: '#4b5563' }}>KM</span>
+                                                </div>
+                                                {distRestante !== undefined && distRestante !== null && (
+                                                    <div style={{ fontSize: '0.65rem', marginTop: '0.3rem', color: distRestante < 1 ? '#22c55e' : distRestante < 5 ? '#f59e0b' : '#4b5563' }}>
+                                                        {distRestante < 0.5 ? '🎯 Llegando al destino' :
+                                                         distRestante < 1 ? '🎯 Muy cerca del destino' :
+                                                         distRestante < 5 ? '📍 Aproximándose al destino' :
+                                                         `📍 ${calcularETA(distRestante, velocidad)} restantes`}
+                                                    </div>
+                                                )}
                                             </div>
-                                        )}
-                                    </div>
 
-                                    <div style={{ padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.03)' }}>
-                                        <span style={{ display: 'block', fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.4rem' }}>Estado del Canal</span>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#22c55e', animation: 'pulse 1s infinite' }}></div>
-                                            <span style={{ fontSize: '0.9rem', fontWeight: '600', color: '#4ade80' }}>Conectado</span>
+                                            {/* Estado del Canal - Datos Reales */}
+                                            <div style={{ padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', border: `1px solid ${gpsStatus.color}20` }}>
+                                                <span style={{ display: 'block', fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.4rem' }}>Estado del Canal GPS</span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                    <div style={{
+                                                        width: '10px', height: '10px', borderRadius: '50%',
+                                                        backgroundColor: gpsStatus.color,
+                                                        boxShadow: gpsStatus.isConnected ? `0 0 8px ${gpsStatus.color}` : 'none',
+                                                        animation: gpsStatus.isConnected ? 'pulse 1.5s infinite' : 'none'
+                                                    }}></div>
+                                                    <span style={{ fontSize: '0.9rem', fontWeight: '600', color: gpsStatus.color }}>
+                                                        {gpsStatus.label}
+                                                    </span>
+                                                </div>
+                                                {ruta.ultimaActualizacionGPS && (
+                                                    <div style={{ fontSize: '0.6rem', color: '#4b5563', marginTop: '0.4rem' }}>
+                                                        Última señal: {new Date(ruta.ultimaActualizacionGPS).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* ETA Card */}
+                                            {ruta.estado === 'EN_CURSO' && ruta.distanciaRestanteKm !== undefined && (
+                                                <div style={{ padding: '1rem', background: 'linear-gradient(135deg, rgba(59, 246, 59, 0.05), rgba(34, 197, 94, 0.08))', borderRadius: '12px', border: '1px solid rgba(59, 246, 59, 0.15)' }}>
+                                                    <span style={{ display: 'block', fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.4rem' }}>Tiempo Estimado Llegada</span>
+                                                    <span style={{ fontSize: '1.5rem', fontWeight: '800', color: '#3bf63b' }}>
+                                                        {calcularETA(ruta.distanciaRestanteKm, ruta.velocidadActualKmh)}
+                                                    </span>
+                                                    {ruta.velocidadActualKmh !== undefined && ruta.velocidadActualKmh > 0 && (
+                                                        <div style={{ fontSize: '0.6rem', color: '#4b5563', marginTop: '0.3rem' }}>
+                                                            A velocidad media de {ruta.velocidadActualKmh.toFixed(0)} km/h
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
-                                    </div>
-                                </div>
+                                    );
+                                })()}
 
                                 <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                                     <button

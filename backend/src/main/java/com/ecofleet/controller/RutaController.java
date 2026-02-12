@@ -51,7 +51,6 @@ public class RutaController {
                         ruta.getLatitudActual() == null) {
                        
                         System.out.println("[RutaController] Iniciando ruta - ESPERANDO GPS REAL del dispositivo");
-                        // NO inicializar con origen - esperar GPS real del emulador/dispositivo
                         ruta.setLatitudActual(null);
                         ruta.setLongitudActual(null);
                     }
@@ -59,16 +58,67 @@ public class RutaController {
                     if (rutaActualizada.getEstado() != null) {
                         ruta.setEstado(rutaActualizada.getEstado());
                     }
-                    if (rutaActualizada.getLatitudActual() != null) {
-                        ruta.setLatitudActual(rutaActualizada.getLatitudActual());
-                    }
-                    if (rutaActualizada.getLongitudActual() != null) {
-                        ruta.setLongitudActual(rutaActualizada.getLongitudActual());
-                    }
                     
-                    if (rutaActualizada.getLatitudActual() != null || rutaActualizada.getLongitudActual() != null) {
-                        String timestamp = Instant.now().toString();
-                        ruta.setUltimaActualizacionGPS(timestamp);
+                    // Calcular velocidad y distancia si se reciben nuevas coordenadas GPS
+                    if (rutaActualizada.getLatitudActual() != null && rutaActualizada.getLongitudActual() != null) {
+                        Double latitudAnterior = ruta.getLatitudActual();
+                        Double longitudAnterior = ruta.getLongitudActual();
+                        String timestampAnterior = ruta.getUltimaActualizacionGPS();
+                        
+                        ruta.setLatitudActual(rutaActualizada.getLatitudActual());
+                        ruta.setLongitudActual(rutaActualizada.getLongitudActual());
+                        
+                        String timestampActual = Instant.now().toString();
+                        ruta.setUltimaActualizacionGPS(timestampActual);
+                        
+                        // Calcular velocidad si tenemos posición anterior
+                        if (latitudAnterior != null && longitudAnterior != null && timestampAnterior != null) {
+                            try {
+                                double distanciaRecorrida = calcularDistancia(
+                                    latitudAnterior, longitudAnterior,
+                                    rutaActualizada.getLatitudActual(), rutaActualizada.getLongitudActual()
+                                );
+                                
+                                Instant instanteAnterior = Instant.parse(timestampAnterior);
+                                Instant instanteActual = Instant.parse(timestampActual);
+                                double segundosTranscurridos = (instanteActual.toEpochMilli() - instanteAnterior.toEpochMilli()) / 1000.0;
+                                double horasTranscurridas = segundosTranscurridos / 3600.0;
+                                
+                                if (horasTranscurridas > 0 && distanciaRecorrida > 0.001) {
+                                    double velocidad = distanciaRecorrida / horasTranscurridas;
+                                    velocidad = Math.max(0, Math.min(200, velocidad));
+                                    ruta.setVelocidadActualKmh(velocidad);
+                                } else {
+                                    ruta.setVelocidadActualKmh(0.0);
+                                }
+                            } catch (Exception e) {
+                                System.err.println("[RutaController] Error calculando velocidad en PUT: " + e.getMessage());
+                                ruta.setVelocidadActualKmh(0.0);
+                            }
+                        } else {
+                            ruta.setVelocidadActualKmh(0.0);
+                        }
+                        
+                        // Calcular distancia restante al destino
+                        if (ruta.getLatitudDestino() != null && ruta.getLongitudDestino() != null) {
+                            double distanciaRestante = calcularDistancia(
+                                rutaActualizada.getLatitudActual(), rutaActualizada.getLongitudActual(),
+                                ruta.getLatitudDestino(), ruta.getLongitudDestino()
+                            );
+                            ruta.setDistanciaRestanteKm(distanciaRestante);
+                        }
+                        
+                        // Calcular si está desviado
+                        if (ruta.getLatitudOrigen() != null && ruta.getLongitudOrigen() != null &&
+                            ruta.getLatitudDestino() != null && ruta.getLongitudDestino() != null &&
+                            ruta.getDistanciaRestanteKm() != null) {
+                            
+                            double distanciaTotal = calcularDistancia(
+                                ruta.getLatitudOrigen(), ruta.getLongitudOrigen(),
+                                ruta.getLatitudDestino(), ruta.getLongitudDestino()
+                            );
+                            ruta.setDesviado(ruta.getDistanciaRestanteKm() > (distanciaTotal * 1.2));
+                        }
                     }
                     
                     if (rutaActualizada.getDesviado() != null) ruta.setDesviado(rutaActualizada.getDesviado());

@@ -473,10 +473,6 @@ export default function Dashboard() {
             <button
               className={`${styles.navButton} ${activeTab === 'tracking' ? styles.activeTab : ''}`}
               onClick={() => setActiveTab('tracking')}
-              style={{
-                background: activeTab === 'tracking' ? 'linear-gradient(135deg, rgba(59, 246, 59, 0.2), rgba(34, 197, 94, 0.2))' : undefined,
-                border: activeTab === 'tracking' ? '1px solid rgba(59, 246, 59, 0.5)' : undefined
-              }}
             >
               Tracking en Vivo
             </button>
