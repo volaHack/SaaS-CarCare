@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import Link from "next/link";
 import styles from "../login/login.module.css";
-// BackgroundMeteors removed
+import CloudflareTurnstile from "@/componentes/CloudflareTurnstile";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production.up.railway.app";
 
@@ -36,12 +36,21 @@ export default function RegisterPage() {
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [passwordStrength, setPasswordStrength] = useState(0);
+    const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
     const [formData, setFormData] = useState({
         nombre: "",
         nombreEmpresa: "",
         email: "",
         password: ""
     });
+
+    const handleTurnstileVerify = useCallback((token: string) => {
+        setTurnstileToken(token);
+    }, []);
+
+    const handleTurnstileExpire = useCallback(() => {
+        setTurnstileToken(null);
+    }, []);
 
     const calculatePasswordStrength = (password: string) => {
         let strength = 0;
@@ -219,7 +228,13 @@ export default function RegisterPage() {
                             )}
                         </div>
 
-                        <button type="submit" className={styles.submitBtn} disabled={loading}>
+                        <CloudflareTurnstile
+                            onVerify={handleTurnstileVerify}
+                            onExpire={handleTurnstileExpire}
+                            theme="dark"
+                        />
+
+                        <button type="submit" className={styles.submitBtn} disabled={loading || (!turnstileToken && !!process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY)}>
                             {loading ? (
                                 <span className={styles.loadingDots}>
                                     <span>.</span><span>.</span><span>.</span>

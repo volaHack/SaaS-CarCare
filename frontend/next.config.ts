@@ -1,5 +1,6 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+import type { NextConfig } from 'next'
+
+const nextConfig: NextConfig = {
   allowedDevOrigins: [
     'http://10.0.2.2',
     'http://localhost',
@@ -14,4 +15,4 @@ const nextConfig = {
   },
 }
 
-module.exports = nextConfig
+export default nextConfig

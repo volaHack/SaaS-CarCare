@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import Link from "next/link";
 import styles from "./login.module.css";
+import CloudflareTurnstile from "@/componentes/CloudflareTurnstile";
 // BackgroundMeteors removed for cleaner professional look
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production.up.railway.app";
@@ -35,10 +36,19 @@ export default function LoginPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
     const [formData, setFormData] = useState({
         email: "",
         password: ""
     });
+
+    const handleTurnstileVerify = useCallback((token: string) => {
+        setTurnstileToken(token);
+    }, []);
+
+    const handleTurnstileExpire = useCallback(() => {
+        setTurnstileToken(null);
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -162,7 +172,13 @@ export default function LoginPage() {
                             </div>
                         </div>
 
-                        <button type="submit" className={styles.submitBtn} disabled={loading}>
+                        <CloudflareTurnstile
+                            onVerify={handleTurnstileVerify}
+                            onExpire={handleTurnstileExpire}
+                            theme="dark"
+                        />
+
+                        <button type="submit" className={styles.submitBtn} disabled={loading || (!turnstileToken && !!process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY)}>
                             {loading ? (
                                 <span className={styles.loadingDots}>
                                     <span>.</span><span>.</span><span>.</span>
