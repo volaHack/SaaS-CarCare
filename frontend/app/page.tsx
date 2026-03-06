@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./landing/landing.module.css";
 
@@ -48,15 +48,7 @@ const LeafIcon = () => (
   </svg>
 );
 
-const SparklesIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
-    <path d="M5 3v4" />
-    <path d="M19 17v4" />
-    <path d="M3 5h4" />
-    <path d="M17 19h4" />
-  </svg>
-);
+
 
 const SmartphoneIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -101,77 +93,61 @@ const AndroidIcon = () => (
   </svg>
 );
 
-const FloatingParticles = () => {
-  const [particles, setParticles] = useState<Array<{ id: number; left: string; top: string; delay: string; duration: string }>>([]);
 
-  useEffect(() => {
-    // Generar partículas solo en el cliente para evitar hydration mismatch
-    const newParticles = [...Array(50)].map((_, i) => ({
-      id: i,
-      left: `${Math.random() * 100}%`,
-      top: `${Math.random() * 100}%`,
-      delay: `${Math.random() * 5}s`,
-      duration: `${3 + Math.random() * 4}s`,
-    }));
-    setParticles(newParticles);
-  }, []);
-
-  if (particles.length === 0) return null;
-
-  return (
-    <div className={styles.particles}>
-      {particles.map((p) => (
-        <div
-          key={p.id}
-          className={styles.particle}
-          style={{
-            left: p.left,
-            top: p.top,
-            animationDelay: p.delay,
-            animationDuration: p.duration,
-          }}
-        />
-      ))}
-    </div>
-  );
-};
-
-// Componente de fondo con gradiente animado
-const AnimatedBackground = () => {
-  return (
-    <div className={styles.animatedBg}>
-      <div className={styles.gradientOrb1} />
-      <div className={styles.gradientOrb2} />
-      <div className={styles.gradientOrb3} />
-      <div className={styles.gridOverlay} />
-    </div>
-  );
-};
 
 export default function LandingPage() {
   const router = useRouter();
   const [isVisible, setIsVisible] = useState(false);
-  const [activeFeature, setActiveFeature] = useState(0);
   const [scrollY, setScrollY] = useState(0);
+
+  // Refs for scroll-triggered animations
+  const heroVisualRef = useRef<HTMLDivElement>(null);
+  const downloadVisualRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
     setIsVisible(true);
 
-    const handleScroll = () => {
+    const updateScroll = () => {
       setScrollY(window.scrollY);
+      rafRef.current = null;
     };
 
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    const handleScroll = () => {
+      if (rafRef.current === null) {
+        rafRef.current = requestAnimationFrame(updateScroll);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
   }, []);
 
-  // Rotación automática de features
+  // Intersection Observer for scroll-triggered animations
   useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveFeature((prev) => (prev + 1) % features.length);
-    }, 4000);
-    return () => clearInterval(interval);
-  }, []);
+    const observerOptions = {
+      threshold: [0, 0.1, 0.2, 0.3],
+      rootMargin: '0px 0px -80px 0px'
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const el = entry.target as HTMLElement;
+        if (entry.isIntersecting) {
+          el.classList.add(styles.scrollVisible);
+        }
+      });
+    }, observerOptions);
+
+    const animatedElements = document.querySelectorAll(`.${styles.scrollReveal}`);
+    animatedElements.forEach((el) => observer.observe(el));
+
+    return () => observer.disconnect();
+  }, [isVisible]);
 
   const features = [
     {
@@ -213,16 +189,16 @@ export default function LandingPage() {
   ];
 
   const stats = [
-    { number: "99.9%", label: "Uptime Garantizado" },
-    { number: "3s", label: "Actualización GPS" },
-    { number: "50+", label: "Flotas Gestionadas" },
-    { number: "24/7", label: "Soporte Técnico" }
+    { number: "30%", label: "Reducción en Costos de Mantenimiento" },
+    { number: "15min", label: "Configuración Inicial" },
+    { number: "1,200+", label: "Vehículos Monitoreados" },
+    { number: "<2h", label: "Tiempo de Respuesta Soporte" }
   ];
 
   return (
-    <main className={styles.main}>
-      <AnimatedBackground />
-      <FloatingParticles />
+    <main className={styles.main} ref={mainRef}>
+      {/* Subtle background gradient */}
+      <div className={styles.bgGradient} />
 
       {/* Navigation */}
       <nav className={styles.navbar}>
@@ -256,7 +232,6 @@ export default function LandingPage() {
       <section className={styles.hero}>
         <div className={`${styles.heroContent} ${isVisible ? styles.visible : ''}`}>
           <div className={styles.heroTag}>
-            <span className={styles.tagIcon}><SparklesIcon /></span>
             <span>La revolución en gestión de flotas</span>
           </div>
 
@@ -295,47 +270,115 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Hero Visual */}
-        <div className={styles.heroVisual}>
-          <div className={styles.mockupContainer}>
-            <div className={styles.dashboardMockup}>
-              <div className={styles.mockupHeader}>
-                <div className={styles.mockupDots}>
-                  <span></span><span></span><span></span>
+        {/* Hero Visual - 3D Dashboard with Parallax */}
+        <div
+          className={styles.heroVisual}
+          ref={heroVisualRef}
+          style={{
+            transform: `translateY(${scrollY * -0.08}px)`,
+          }}
+        >
+          <div className={styles.dashCardsWrap}>
+
+            {/* Main map card - large */}
+            <div className={`${styles.dashCard} ${styles.dashCardMap} ${styles.scrollReveal}`} style={{ '--delay': '0s' } as React.CSSProperties}>
+              <div className={styles.dashCardHead}>
+                <span className={styles.dashCardLabel}>Mapa en vivo</span>
+                <div className={styles.dashLiveBadge}>
+                  <span className={styles.liveIndicator}></span>
+                  <span>3 vehiculos activos</span>
                 </div>
-                <span className={styles.mockupUrl}>carcare-tracker.app</span>
               </div>
-              <div className={styles.mockupContent}>
-                <div className={styles.mockupSidebar}>
-                  <div className={styles.sidebarItem}></div>
-                  <div className={styles.sidebarItem}></div>
-                  <div className={styles.sidebarItem}></div>
+              <div className={styles.dashMapBody}>
+                <svg className={styles.dashMapRoads} viewBox="0 0 420 180">
+                  <path d="M 0 140 Q 80 120 150 80 Q 220 40 300 55 Q 380 70 420 30" stroke="rgba(255,255,255,0.05)" strokeWidth="14" fill="none" />
+                  <path d="M 0 90 Q 60 110 140 60 Q 220 10 320 40 Q 380 55 420 20" stroke="rgba(255,255,255,0.04)" strokeWidth="9" fill="none" />
+                  <path d="M 40 180 Q 100 150 200 130 Q 300 110 420 100" stroke="rgba(255,255,255,0.03)" strokeWidth="7" fill="none" />
+                  {/* Route trace */}
+                  <path d="M 50 130 C 120 100 180 50 260 55 C 340 60 370 35 400 25" stroke="rgba(59,246,59,0.12)" strokeWidth="10" fill="none" strokeLinecap="round" />
+                  <path d="M 50 130 C 120 100 180 50 260 55 C 340 60 370 35 400 25" stroke="#3bf63b" strokeWidth="2.5" fill="none" strokeLinecap="round" className={styles.dashRoutePath} />
+                  {/* Pins */}
+                  <circle cx="50" cy="130" r="6" fill="#0f172a" stroke="#3bf63b" strokeWidth="2" />
+                  <circle cx="50" cy="130" r="2.5" fill="#3bf63b" />
+                  <circle cx="260" cy="55" r="5" fill="#0f172a" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" />
+                  <circle cx="260" cy="55" r="2" fill="rgba(255,255,255,0.5)" />
+                  <circle cx="400" cy="25" r="6" fill="#0f172a" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" />
+                  <circle cx="400" cy="25" r="2.5" fill="rgba(255,255,255,0.5)" />
+                </svg>
+                {/* Vehicle on route */}
+                <div className={styles.dashVehicle}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="#3bf63b"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
                 </div>
-                <div className={styles.mockupMain}>
-                  <div className={styles.mockupCard}></div>
-                  <div className={styles.mockupCard}></div>
-                  <div className={styles.mockupMap}>
-                    <div className={styles.mapPin}></div>
-                    <div className={styles.mapPin} style={{ left: '60%', top: '40%' }}></div>
-                    <div className={styles.mapRoute}></div>
+              </div>
+            </div>
+
+            {/* Stats cards row */}
+            <div className={styles.dashStatsRow}>
+              <div className={`${styles.dashCard} ${styles.dashCardStat} ${styles.scrollReveal}`} style={{ '--delay': '0.15s' } as React.CSSProperties}>
+                <div className={styles.dashStatIcon}>
+                  <CarIcon />
+                </div>
+                <div className={styles.dashStatData}>
+                  <span className={styles.dashStatNum}>24</span>
+                  <span className={styles.dashStatLabel}>Vehiculos</span>
+                </div>
+              </div>
+              <div className={`${styles.dashCard} ${styles.dashCardStat} ${styles.scrollReveal}`} style={{ '--delay': '0.25s' } as React.CSSProperties}>
+                <div className={styles.dashStatIcon}>
+                  <RouteIcon />
+                </div>
+                <div className={styles.dashStatData}>
+                  <span className={styles.dashStatNum}>18</span>
+                  <span className={styles.dashStatLabel}>En ruta</span>
+                </div>
+              </div>
+              <div className={`${styles.dashCard} ${styles.dashCardStat} ${styles.scrollReveal}`} style={{ '--delay': '0.35s' } as React.CSSProperties}>
+                <div className={styles.dashStatIcon}>
+                  <ChartIcon />
+                </div>
+                <div className={styles.dashStatData}>
+                  <span className={styles.dashStatNum}>98%</span>
+                  <span className={styles.dashStatLabel}>Eficiencia</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom row - activity + chart */}
+            <div className={styles.dashBottomRow}>
+              <div className={`${styles.dashCard} ${styles.dashCardActivity} ${styles.scrollReveal}`} style={{ '--delay': '0.45s' } as React.CSSProperties}>
+                <span className={styles.dashCardLabel}>Actividad reciente</span>
+                <div className={styles.dashActivityList}>
+                  <div className={styles.dashActivityItem}>
+                    <span className={styles.dashActivityDot} style={{ background: '#3bf63b' }}></span>
+                    <span className={styles.dashActivityTxt}>Vehiculo #07 en ruta</span>
+                    <span className={styles.dashActivityTime}>hace 2m</span>
+                  </div>
+                  <div className={styles.dashActivityItem}>
+                    <span className={styles.dashActivityDot} style={{ background: '#eab308' }}></span>
+                    <span className={styles.dashActivityTxt}>Mantenimiento #12</span>
+                    <span className={styles.dashActivityTime}>hace 15m</span>
+                  </div>
+                  <div className={styles.dashActivityItem}>
+                    <span className={styles.dashActivityDot} style={{ background: '#3bf63b' }}></span>
+                    <span className={styles.dashActivityTxt}>Ruta completada #19</span>
+                    <span className={styles.dashActivityTime}>hace 1h</span>
                   </div>
                 </div>
               </div>
-            </div>
-            <div className={styles.phoneMockup}>
-              <div className={styles.phoneNotch}></div>
-              <div className={styles.phoneContent}>
-                <div className={styles.phoneHeader}>
-                  <CarIcon />
-                  <span>Ruta Activa</span>
-                </div>
-                <div className={styles.phoneMap}></div>
-                <div className={styles.phoneStatus}>
-                  <span className={styles.liveIndicator}></span>
-                  <span>GPS Activo</span>
+              <div className={`${styles.dashCard} ${styles.dashCardChart} ${styles.scrollReveal}`} style={{ '--delay': '0.55s' } as React.CSSProperties}>
+                <span className={styles.dashCardLabel}>Consumo semanal</span>
+                <div className={styles.dashChartBars}>
+                  <div className={styles.dashBar} style={{ '--bar-h': '45%' } as React.CSSProperties}><span>L</span></div>
+                  <div className={styles.dashBar} style={{ '--bar-h': '70%' } as React.CSSProperties}><span>M</span></div>
+                  <div className={styles.dashBar} style={{ '--bar-h': '55%' } as React.CSSProperties}><span>X</span></div>
+                  <div className={styles.dashBar} style={{ '--bar-h': '85%' } as React.CSSProperties}><span>J</span></div>
+                  <div className={`${styles.dashBar} ${styles.dashBarActive}`} style={{ '--bar-h': '65%' } as React.CSSProperties}><span>V</span></div>
+                  <div className={styles.dashBar} style={{ '--bar-h': '30%' } as React.CSSProperties}><span>S</span></div>
+                  <div className={styles.dashBar} style={{ '--bar-h': '20%' } as React.CSSProperties}><span>D</span></div>
                 </div>
               </div>
             </div>
+
           </div>
         </div>
       </section>
@@ -356,16 +399,14 @@ export default function LandingPage() {
           {features.map((feature, index) => (
             <div
               key={index}
-              className={`${styles.featureCard} ${activeFeature === index ? styles.activeCard : ''}`}
-              onMouseEnter={() => setActiveFeature(index)}
-              style={{ '--accent-color': feature.color } as React.CSSProperties}
+              className={`${styles.featureCard} ${styles.scrollReveal}`}
+              style={{ '--delay': `${index * 0.1}s` } as React.CSSProperties}
             >
               <div className={styles.featureIcon}>
                 {feature.icon}
               </div>
               <h3 className={styles.featureTitle}>{feature.title}</h3>
               <p className={styles.featureDesc}>{feature.description}</p>
-              <div className={styles.featureGlow} />
             </div>
           ))}
         </div>
@@ -470,38 +511,125 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div className={styles.downloadVisual}>
-            <div className={styles.downloadPhone}>
+          <div className={styles.downloadVisual} ref={downloadVisualRef}>
+            <div className={`${styles.downloadPhone} ${styles.scrollReveal}`} style={{ '--delay': '0s' } as React.CSSProperties}>
               <div className={styles.phoneFrame}>
                 <div className={styles.phoneNotch}></div>
                 <div className={styles.phoneScreen}>
-                  <div className={styles.appHeader}>
-                    <span className={styles.appLogo}><CarIcon /></span>
-                    <span>CarCare Driver</span>
-                  </div>
-                  <div className={styles.appRoute}>
-                    <div className={styles.routeInfo}>
-                      <span className={styles.routeLabel}>Ruta Activa</span>
-                      <span className={styles.routeTitle}>Madrid → Barcelona</span>
+
+                  {/* Status bar */}
+                  <div className={styles.phoneStatusBar}>
+                    <span className={styles.phoneTime}>9:41</span>
+                    <div className={styles.phoneSignals}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 0 0-6 0zm-4-4l2 2a7.074 7.074 0 0 1 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4z"/></svg>
                     </div>
-                    <div className={styles.routeStatus}>
+                  </div>
+
+                  {/* App header */}
+                  <div className={`${styles.appHeader} ${styles.scrollReveal}`} style={{ '--delay': '0.15s' } as React.CSSProperties}>
+                    <div className={styles.appHeaderLeft}>
+                      <span className={styles.appLogo}><CarIcon /></span>
+                      <div className={styles.appHeaderText}>
+                        <span className={styles.appHeaderTitle}>CarCare Driver</span>
+                        <span className={styles.appHeaderSub}>Conductor activo</span>
+                      </div>
+                    </div>
+                    <div className={styles.appHeaderStatus}>
                       <span className={styles.liveIndicator}></span>
-                      <span>En curso</span>
+                      <span>Online</span>
                     </div>
                   </div>
-                  <div className={styles.appMap}>
-                    <div className={styles.mapGradient}></div>
+
+                  {/* Route card */}
+                  <div className={`${styles.appRoute} ${styles.scrollReveal}`} style={{ '--delay': '0.3s' } as React.CSSProperties}>
+                    <div className={styles.routeTimeline}>
+                      <div className={styles.routeDotOrigin}></div>
+                      <div className={styles.routeLine}></div>
+                      <div className={styles.routeDotDest}></div>
+                    </div>
+                    <div className={styles.routeDetails}>
+                      <div className={styles.routePoint}>
+                        <span className={styles.routeCity}>Madrid</span>
+                        <span className={styles.routeTime}>06:30 - Salida</span>
+                      </div>
+                      <div className={styles.routePoint}>
+                        <span className={styles.routeCity}>Barcelona</span>
+                        <span className={styles.routeTime}>12:00 - Llegada est.</span>
+                      </div>
+                    </div>
+                    <div className={styles.routeBadge}>
+                      <span className={styles.liveIndicator}></span>
+                      En curso
+                    </div>
                   </div>
-                  <div className={styles.appStats}>
+
+                  {/* Progress bar */}
+                  <div className={`${styles.appProgress} ${styles.scrollReveal}`} style={{ '--delay': '0.4s' } as React.CSSProperties}>
+                    <div className={styles.progressHeader}>
+                      <span className={styles.progressLabel}>Progreso de ruta</span>
+                      <span className={styles.progressPct}>38%</span>
+                    </div>
+                    <div className={styles.progressTrack}>
+                      <div className={styles.progressFill}></div>
+                      <div className={styles.progressDot}></div>
+                    </div>
+                  </div>
+
+                  {/* Map area */}
+                  <div className={`${styles.appMap} ${styles.scrollReveal}`} style={{ '--delay': '0.45s' } as React.CSSProperties}>
+                    {/* Road network background */}
+                    <svg className={styles.mapRoads} viewBox="0 0 250 150" preserveAspectRatio="none">
+                      <path d="M 0 120 Q 40 110 80 90 Q 120 70 160 75 Q 200 80 250 50" stroke="rgba(255,255,255,0.06)" strokeWidth="12" fill="none" />
+                      <path d="M 0 80 Q 50 95 100 60 Q 150 25 200 40 Q 230 48 250 30" stroke="rgba(255,255,255,0.04)" strokeWidth="8" fill="none" />
+                      <path d="M 30 150 Q 60 130 100 120 Q 160 105 250 90" stroke="rgba(255,255,255,0.03)" strokeWidth="6" fill="none" />
+                    </svg>
+                    {/* Main route */}
+                    <svg className={styles.appMapRoute} viewBox="0 0 250 150">
+                      <path d="M 25 125 C 70 105 100 60 140 55 C 180 50 200 35 225 25" stroke="rgba(59,246,59,0.15)" strokeWidth="8" fill="none" strokeLinecap="round" />
+                      <path d="M 25 125 C 70 105 100 60 140 55 C 180 50 200 35 225 25" stroke="#3bf63b" strokeWidth="2.5" fill="none" strokeLinecap="round" className={styles.appMapRoutePath} />
+                      {/* Origin pin */}
+                      <circle cx="25" cy="125" r="6" fill="#0f172a" stroke="#3bf63b" strokeWidth="2.5" />
+                      <circle cx="25" cy="125" r="2.5" fill="#3bf63b" />
+                      {/* Destination pin */}
+                      <circle cx="225" cy="25" r="6" fill="#0f172a" stroke="rgba(255,255,255,0.4)" strokeWidth="2" />
+                      <circle cx="225" cy="25" r="2.5" fill="rgba(255,255,255,0.6)" />
+                    </svg>
+                    {/* Vehicle indicator */}
+                    <div className={styles.mapVehicle}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="#3bf63b"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
+                    </div>
+                    <span className={styles.appMapLabel} style={{ bottom: '8px', left: '12px' }}>Madrid</span>
+                    <span className={styles.appMapLabel} style={{ top: '6px', right: '12px' }}>BCN</span>
+                  </div>
+
+                  {/* Stats row */}
+                  <div className={`${styles.appStats} ${styles.scrollReveal}`} style={{ '--delay': '0.6s' } as React.CSSProperties}>
                     <div className={styles.appStat}>
+                      <span className={styles.appStatIcon}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 20l-5.447-2.724A1 1 0 0 1 3 16.382V5.618a1 1 0 0 1 1.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0 0 21 18.382V7.618a1 1 0 0 0-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+                      </span>
                       <span className={styles.appStatValue}>623</span>
-                      <span className={styles.appStatLabel}>km restantes</span>
+                      <span className={styles.appStatUnit}>km</span>
+                      <span className={styles.appStatLabel}>restantes</span>
                     </div>
                     <div className={styles.appStat}>
+                      <span className={styles.appStatIcon}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      </span>
                       <span className={styles.appStatValue}>5h 30m</span>
                       <span className={styles.appStatLabel}>tiempo est.</span>
                     </div>
+                    <div className={styles.appStat}>
+                      <span className={styles.appStatIcon}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                      </span>
+                      <span className={styles.appStatValue}>82</span>
+                      <span className={styles.appStatUnit}>km/h</span>
+                      <span className={styles.appStatLabel}>velocidad</span>
+                    </div>
                   </div>
+
                 </div>
               </div>
               <div className={styles.phoneGlow}></div>
@@ -526,10 +654,6 @@ export default function LandingPage() {
             <span>Comenzar Ahora</span>
             <span className={styles.ctaArrow}><ArrowRightIcon /></span>
           </button>
-        </div>
-        <div className={styles.ctaOrbs}>
-          <div className={styles.ctaOrb1}></div>
-          <div className={styles.ctaOrb2}></div>
         </div>
       </section>
 
