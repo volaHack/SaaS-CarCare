@@ -5,6 +5,7 @@
     "rootDirectory": "frontend"
   },
   "deploy": {
-    "startCommand": "npm run start"
+    "startCommand": "node_modules/.bin/next start",
+    "restartPolicyType": "ON_FAILURE"
   }
 }
