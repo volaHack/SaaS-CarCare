@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./landing/landing.module.css";
+import BackgroundMeteors from "@/componentes/BackgroundMeteors";
 
 // SVG Icons
 const CarIcon = () => (
@@ -189,14 +190,15 @@ export default function LandingPage() {
   ];
 
   const stats = [
-    { number: "30%", label: "Reducción en Costos de Mantenimiento" },
-    { number: "15min", label: "Configuración Inicial" },
-    { number: "1,200+", label: "Vehículos Monitoreados" },
-    { number: "<2h", label: "Tiempo de Respuesta Soporte" }
+    { number: "30%", label: "Menos costes" },
+    { number: "15min", label: "Setup inicial" },
+    { number: "1,200+", label: "Vehículos" },
+    { number: "<2h", label: "Soporte" }
   ];
 
   return (
     <main className={styles.main} ref={mainRef}>
+      <BackgroundMeteors fixed />
       {/* Subtle background gradient */}
       <div className={styles.bgGradient} />
 
