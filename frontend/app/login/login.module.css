@@ -366,6 +366,68 @@
     }
 }
 
+/* OAuth Divider */
+.oauthDivider {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+
+.oauthDivider::before,
+.oauthDivider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #334155;
+}
+
+.oauthDivider span {
+    color: #64748b;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Google Button */
+.googleBtn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 0.8rem 1rem;
+    background: transparent;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.googleBtn:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: #475569;
+    transform: translateY(-1px);
+}
+
+.googleBtn:active {
+    transform: translateY(0);
+}
+
+.googleBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.googleBtn svg {
+    flex-shrink: 0;
+}
+
 .footerLink {
     margin-top: 2rem;
     text-align: center;

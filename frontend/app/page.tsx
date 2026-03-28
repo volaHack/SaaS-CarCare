@@ -165,8 +165,8 @@ export default function LandingPage() {
     },
     {
       icon: <ChartIcon />,
-      title: "Analíticas Avanzadas",
-      description: "Predicciones de consumo, tendencias mensuales y recomendaciones para optimizar costes.",
+      title: "Control de Consumo",
+      description: "Registra cada repostaje con litros, precio y coste. Historial completo por vehículo para analizar el consumo real.",
       color: "#0ee936"
     },
     {
@@ -183,17 +183,17 @@ export default function LandingPage() {
     },
     {
       icon: <LeafIcon />,
-      title: "Eco-Friendly",
-      description: "Métricas de sostenibilidad y ahorro de combustible para reducir tu huella de carbono.",
+      title: "Mantenimiento Integral",
+      description: "Preventivo y correctivo por vehículo. Taller, repuestos, costes y programación del próximo servicio.",
       color: "#22c55e"
     }
   ];
 
   const stats = [
-    { number: "30%", label: "Menos costes" },
-    { number: "15min", label: "Setup inicial" },
-    { number: "1,200+", label: "Vehículos" },
-    { number: "<2h", label: "Soporte" }
+    { number: "6", label: "Módulos" },
+    { number: "3s", label: "Refresh GPS" },
+    { number: "∞", label: "Sin límite" },
+    { number: "24/7", label: "Monitorización" }
   ];
 
   return (
@@ -309,7 +309,7 @@ export default function LandingPage() {
                 </svg>
                 {/* Vehicle on route */}
                 <div className={styles.dashVehicle}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="#3bf63b"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="#3bf63b"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z" /></svg>
                 </div>
               </div>
             </div>
@@ -414,6 +414,76 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Metrics Section */}
+      <section className={styles.metricsSection}>
+        <div className={styles.metricsInner}>
+          <div className={styles.sectionHeader}>
+            <span className={styles.sectionTag}>Módulos integrados</span>
+            <h2 className={styles.sectionTitle}>Todo lo que tu flota necesita</h2>
+            <p className={styles.sectionSubtitle}>Cada módulo resuelve un problema específico de la gestión de flotas. Una sola plataforma, control total.</p>
+          </div>
+          <div className={styles.metricsGrid}>
+            {[
+              { icon: <CarIcon />, number: '6', title: 'Módulos integrados', desc: 'Flota, rutas GPS, conductores, mantenimiento, combustible y mensajería en una sola plataforma.' },
+              { icon: <LocationIcon />, number: '3s', title: 'Refresh GPS', desc: 'Posición calculada con fórmula Haversine. Velocidad, distancia restante y detección de desvíos (+20%).' },
+              { icon: <RouteIcon />, number: '2', title: 'Tipos de mantenimiento', desc: 'Preventivo con programación del próximo y correctivo. Registra taller, repuestos y costes.' },
+              { icon: <ChartIcon />, number: 'L/km', title: 'Control de consumo', desc: 'Historial de repostajes con litros, precio/litro, coste total y kilometraje del vehículo.' },
+            ].map((m, i) => (
+              <div key={i} className={`${styles.metricCard} ${styles.scrollReveal}`} style={{ '--delay': `${i * 0.12}s` } as React.CSSProperties}>
+                <div className={styles.metricIconWrap}>{m.icon}</div>
+                <div className={styles.metricNumber}>{m.number}</div>
+                <div className={styles.metricTitle}>{m.title}</div>
+                <div className={styles.metricDesc}>{m.desc}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className={styles.testimonialRow}>
+            <div className={`${styles.useCaseCard} ${styles.scrollReveal}`} style={{ '--delay': '0.1s' } as React.CSSProperties}>
+              <div className={styles.useCaseTitle}>Panel Web — Empresa</div>
+              <div className={styles.useCaseList}>
+                {[
+                  { title: 'Dashboard completo', desc: 'Resumen visual de toda tu flota: vehículos activos, rutas en curso, mantenimientos pendientes.' },
+                  { title: 'Mapa global en vivo', desc: 'Todos los vehículos en un mapa con posición GPS, velocidad y estado de cada ruta.' },
+                  { title: 'Gestión de rutas', desc: 'Crea rutas con origen y destino, asigna vehículo y monitoriza el progreso en tiempo real.' },
+                  { title: 'Historial de mantenimientos', desc: 'Preventivos y correctivos por vehículo, con taller, repuestos y coste detallado.' },
+                  { title: 'Chat por ruta', desc: 'Comunicación directa con el conductor asociada a cada ruta específica.' },
+                ].map((uc, i) => (
+                  <div key={i} className={styles.useCaseItem}>
+                    <div className={styles.useCaseDot} />
+                    <div className={styles.useCaseItemText}>
+                      <strong>{uc.title}</strong>
+                      <span>{uc.desc}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className={`${styles.useCaseCard} ${styles.scrollReveal}`} style={{ '--delay': '0.2s' } as React.CSSProperties}>
+              <div className={styles.useCaseTitle}>App Android — Conductor</div>
+              <div className={styles.useCaseList}>
+                {[
+                  { title: 'Recibir rutas asignadas', desc: 'El conductor ve la ruta con origen, destino y distancia estimada directamente en la app.' },
+                  { title: 'GPS automático', desc: 'La app envía coordenadas al servidor cada pocos segundos sin intervención del conductor.' },
+                  { title: 'Progreso en tiempo real', desc: 'Barra de progreso con distancia restante, velocidad actual y tiempo estimado de llegada.' },
+                  { title: 'Detección de desvíos', desc: 'El sistema avisa si el vehículo se desvía más del 20% de la ruta directa planificada.' },
+                  { title: 'Mensajería con la central', desc: 'Chat en tiempo real vinculado a la ruta activa para coordinar con la empresa.' },
+                ].map((uc, i) => (
+                  <div key={i} className={styles.useCaseItem}>
+                    <div className={styles.useCaseDot} />
+                    <div className={styles.useCaseItemText}>
+                      <strong>{uc.title}</strong>
+                      <span>{uc.desc}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* How It Works Section */}
       <section id="how-it-works" className={styles.howItWorks}>
         <div className={styles.sectionHeader}>
@@ -424,11 +494,14 @@ export default function LandingPage() {
         </div>
 
         <div className={styles.stepsContainer}>
-          <div className={styles.step}>
+          <div className={`${styles.step} ${styles.scrollReveal}`} style={{ '--delay': '0s' } as React.CSSProperties}>
             <div className={styles.stepNumber}>01</div>
             <div className={styles.stepContent}>
               <h3>Registra tu Flota</h3>
-              <p>Añade tus vehículos con sus datos: matrícula, modelo, kilometraje y tipo de combustible.</p>
+              <p>Añade tus vehículos con matrícula, modelo, kilometraje y tipo de combustible. Importación masiva disponible.</p>
+              <div className={styles.stepOutcome}>
+                <CheckIcon /> Panel listo en menos de 15 minutos
+              </div>
             </div>
             <div className={styles.stepIcon}><CarIcon /></div>
           </div>
@@ -438,11 +511,14 @@ export default function LandingPage() {
             <div className={styles.connectorDot}></div>
           </div>
 
-          <div className={styles.step}>
+          <div className={`${styles.step} ${styles.scrollReveal}`} style={{ '--delay': '0.1s' } as React.CSSProperties}>
             <div className={styles.stepNumber}>02</div>
             <div className={styles.stepContent}>
               <h3>Descarga la App</h3>
-              <p>Tus conductores instalan la app Android para recibir rutas y enviar su ubicación GPS.</p>
+              <p>Tus conductores instalan la app Android. Reciben rutas asignadas, envían GPS cada 3 segundos y chatean contigo.</p>
+              <div className={styles.stepOutcome}>
+                <CheckIcon /> Conductores conectados al instante
+              </div>
             </div>
             <div className={styles.stepIcon}><SmartphoneIcon /></div>
           </div>
@@ -452,11 +528,14 @@ export default function LandingPage() {
             <div className={styles.connectorDot}></div>
           </div>
 
-          <div className={styles.step}>
+          <div className={`${styles.step} ${styles.scrollReveal}`} style={{ '--delay': '0.2s' } as React.CSSProperties}>
             <div className={styles.stepNumber}>03</div>
             <div className={styles.stepContent}>
               <h3>Controla Todo</h3>
-              <p>Monitoriza rutas en tiempo real, analiza datos y optimiza tu operación desde el panel web.</p>
+              <p>Monitoriza rutas en tiempo real, analiza consumos, gestiona mantenimientos y optimiza tu operación completa.</p>
+              <div className={styles.stepOutcome}>
+                <CheckIcon /> -30% costes en los primeros 6 meses
+              </div>
             </div>
             <div className={styles.stepIcon}><ChartIcon /></div>
           </div>
@@ -523,8 +602,8 @@ export default function LandingPage() {
                   <div className={styles.phoneStatusBar}>
                     <span className={styles.phoneTime}>9:41</span>
                     <div className={styles.phoneSignals}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 0 0-6 0zm-4-4l2 2a7.074 7.074 0 0 1 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4z"/></svg>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 0 0-6 0zm-4-4l2 2a7.074 7.074 0 0 1 10 0l2-2C15.14 9.14 8.87 9.14 5 13z" /></svg>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4z" /></svg>
                     </div>
                   </div>
 
@@ -599,7 +678,7 @@ export default function LandingPage() {
                     </svg>
                     {/* Vehicle indicator */}
                     <div className={styles.mapVehicle}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="#3bf63b"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="#3bf63b"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z" /></svg>
                     </div>
                     <span className={styles.appMapLabel} style={{ bottom: '8px', left: '12px' }}>Madrid</span>
                     <span className={styles.appMapLabel} style={{ top: '6px', right: '12px' }}>BCN</span>
@@ -609,7 +688,7 @@ export default function LandingPage() {
                   <div className={`${styles.appStats} ${styles.scrollReveal}`} style={{ '--delay': '0.6s' } as React.CSSProperties}>
                     <div className={styles.appStat}>
                       <span className={styles.appStatIcon}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 20l-5.447-2.724A1 1 0 0 1 3 16.382V5.618a1 1 0 0 1 1.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0 0 21 18.382V7.618a1 1 0 0 0-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 20l-5.447-2.724A1 1 0 0 1 3 16.382V5.618a1 1 0 0 1 1.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0 0 21 18.382V7.618a1 1 0 0 0-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
                       </span>
                       <span className={styles.appStatValue}>623</span>
                       <span className={styles.appStatUnit}>km</span>
@@ -617,14 +696,14 @@ export default function LandingPage() {
                     </div>
                     <div className={styles.appStat}>
                       <span className={styles.appStatIcon}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
                       </span>
                       <span className={styles.appStatValue}>5h 30m</span>
                       <span className={styles.appStatLabel}>tiempo est.</span>
                     </div>
                     <div className={styles.appStat}>
                       <span className={styles.appStatIcon}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" /></svg>
                       </span>
                       <span className={styles.appStatValue}>82</span>
                       <span className={styles.appStatUnit}>km/h</span>
@@ -642,20 +721,62 @@ export default function LandingPage() {
 
       {/* CTA Section */}
       <section className={styles.ctaSection}>
-        <div className={styles.ctaContent}>
-          <h2 className={styles.ctaTitle}>
-            ¿Listo para optimizar tu flota?
-          </h2>
-          <p className={styles.ctaSubtitle}>
-            Comienza hoy mismo y descubre cómo CarCare Tracker puede transformar tu operación
-          </p>
-          <button
-            className={styles.ctaButton}
-            onClick={() => router.push('/login')}
-          >
-            <span>Comenzar Ahora</span>
-            <span className={styles.ctaArrow}><ArrowRightIcon /></span>
-          </button>
+        <div className={styles.ctaInner}>
+          <div className={styles.ctaBenefitGrid}>
+            {[
+              {
+                icon: <CarIcon />,
+                title: 'Multi-empresa',
+                desc: 'Cada empresa gestiona su propia flota con datos completamente aislados. Vehículos, conductores y rutas independientes.',
+              },
+              {
+                icon: <LocationIcon />,
+                title: 'GPS sin hardware extra',
+                desc: 'La app Android envía coordenadas automáticamente. Sin dispositivos GPS externos ni instalaciones complejas.',
+              },
+              {
+                icon: <RouteIcon />,
+                title: 'Detección de desvíos',
+                desc: 'El sistema calcula automáticamente si un vehículo se desvía más del 20% de la ruta directa planificada.',
+              },
+            ].map((b, i) => (
+              <div key={i} className={`${styles.ctaBenefitCard} ${styles.scrollReveal}`} style={{ '--delay': `${i * 0.1}s` } as React.CSSProperties}>
+                <div className={styles.ctaBenefitIconWrap}>{b.icon}</div>
+                <div className={styles.ctaBenefitText}>
+                  <strong>{b.title}</strong>
+                  <p>{b.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className={styles.ctaContent}>
+            <h2 className={styles.ctaTitle}>
+              Empieza a gestionar tu flota hoy
+            </h2>
+            <p className={styles.ctaSubtitle}>
+              Panel web para la empresa, app Android para los conductores.
+              Todo conectado en tiempo real, desde el primer momento.
+            </p>
+            <button
+              className={styles.ctaButton}
+              onClick={() => router.push('/login')}
+            >
+              <span>Comenzar Ahora</span>
+              <span className={styles.ctaArrow}><ArrowRightIcon /></span>
+            </button>
+            <div className={styles.ctaTrustLine}>
+              <span className={styles.ctaTrustItem}>
+                <CheckIcon /> Registro en minutos
+              </span>
+              <span className={styles.ctaTrustItem}>
+                <CheckIcon /> Datos aislados por empresa
+              </span>
+              <span className={styles.ctaTrustItem}>
+                <CheckIcon /> Multiplataforma web + Android
+              </span>
+            </div>
+          </div>
         </div>
       </section>
 

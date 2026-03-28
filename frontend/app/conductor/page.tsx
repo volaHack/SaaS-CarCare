@@ -21,7 +21,7 @@ interface Ruta {
 // En producción, usamos la URL directa del backend
 const API_URL = typeof window !== 'undefined' && window.location.hostname === '10.0.2.2'
     ? '' // Ruta relativa para que Next.js haga de proxy
-    : (process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production.up.railway.app");
+    : (process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production-54f9.up.railway.app");
 
 export default function ConductorDashboard() {
     const [rutas, setRutas] = useState<Ruta[]>([]);

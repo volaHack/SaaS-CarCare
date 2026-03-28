@@ -16,7 +16,7 @@ interface ChatProps {
     rol: "ADMIN" | "CONDUCTOR";
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production.up.railway.app";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production-54f9.up.railway.app";
 
 export default function ChatRuta({ rutaId, rol }: ChatProps) {
     const [mensajes, setMensajes] = useState<Mensaje[]>([]);
