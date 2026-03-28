@@ -33,4 +33,7 @@ public class Usuario {
     
     // For drivers, this stores the ID of the company (Admin) they belong to
     private String empresaId;
+
+    // Google OAuth - stores Google sub (unique user ID)
+    private String googleId;
 }

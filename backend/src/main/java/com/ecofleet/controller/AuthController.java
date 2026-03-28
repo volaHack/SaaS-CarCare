@@ -12,9 +12,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import jakarta.validation.Valid;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Controlador de autenticación.
@@ -207,6 +212,111 @@ public class AuthController {
             return ResponseEntity.internalServerError()
                     .body(Map.of("error", "Error interno del servidor: " + e.getMessage()));
         }
+    }
+
+    /**
+     * Login/Registro con Google OAuth.
+     * Recibe access_token, consulta userinfo de Google, busca o crea usuario.
+     */
+    @PostMapping("/google")
+    public ResponseEntity<?> loginWithGoogle(@RequestBody Map<String, String> payload) {
+        logger.info("═══ LOGIN GOOGLE ═══");
+
+        String accessToken = payload.get("accessToken");
+        if (accessToken == null || accessToken.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Token de Google es obligatorio"));
+        }
+
+        try {
+            // Obtener info del usuario con el access_token
+            URL url = new URL("https://www.googleapis.com/oauth2/v3/userinfo");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Authorization", "Bearer " + accessToken);
+
+            int responseCode = conn.getResponseCode();
+            if (responseCode != 200) {
+                logger.warn("Token de Google inválido, código: {}", responseCode);
+                return ResponseEntity.status(401).body(Map.of("error", "Token de Google inválido"));
+            }
+
+            // Leer respuesta
+            BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line);
+            }
+            reader.close();
+
+            // Parsear JSON manualmente (sin dependencias extra)
+            String json = sb.toString();
+            String email = extractJsonField(json, "email");
+            String name = extractJsonField(json, "name");
+            String googleId = extractJsonField(json, "sub");
+
+            if (email == null || googleId == null) {
+                logger.error("No se pudo extraer email/sub del token de Google");
+                return ResponseEntity.status(401).body(Map.of("error", "Token de Google incompleto"));
+            }
+
+            logger.info("Google auth para: {}", email);
+
+            // Buscar usuario existente por googleId o email
+            Optional<Usuario> existingUser = usuarioRepository.findByGoogleId(googleId);
+            if (existingUser.isEmpty()) {
+                existingUser = usuarioRepository.findByEmail(email);
+            }
+
+            Usuario usuario;
+            if (existingUser.isPresent()) {
+                usuario = existingUser.get();
+                // Vincular googleId si no lo tenía
+                if (usuario.getGoogleId() == null) {
+                    usuario.setGoogleId(googleId);
+                    usuarioRepository.save(usuario);
+                }
+                logger.info("✓ Usuario existente encontrado: {}", usuario.getId());
+            } else {
+                // Crear nuevo usuario
+                usuario = new Usuario();
+                usuario.setEmail(email);
+                usuario.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
+                usuario.setNombre(name != null ? name : email.split("@")[0]);
+                usuario.setRole("ADMIN");
+                usuario.setGoogleId(googleId);
+                usuario = usuarioRepository.save(usuario);
+                logger.info("✓ Nuevo usuario creado via Google: {}", usuario.getId());
+            }
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("id", usuario.getId());
+            response.put("email", usuario.getEmail());
+            response.put("nombre", usuario.getNombre());
+            response.put("nombreEmpresa", usuario.getNombreEmpresa());
+            response.put("role", "ADMIN");
+            response.put("empresaId", null);
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            logger.error("Error en login con Google: ", e);
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Error al verificar con Google: " + e.getMessage()));
+        }
+    }
+
+    private String extractJsonField(String json, String field) {
+        String key = "\"" + field + "\"";
+        int idx = json.indexOf(key);
+        if (idx == -1) return null;
+        int colonIdx = json.indexOf(":", idx);
+        if (colonIdx == -1) return null;
+        int startQuote = json.indexOf("\"", colonIdx + 1);
+        if (startQuote == -1) return null;
+        int endQuote = json.indexOf("\"", startQuote + 1);
+        if (endQuote == -1) return null;
+        return json.substring(startQuote + 1, endQuote);
     }
 
     /**
