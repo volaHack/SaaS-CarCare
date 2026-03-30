@@ -81,7 +81,7 @@ export default function LoginPage() {
     const handleGoogleSuccess = async (tokenResponse: { access_token: string }) => {
         setLoading(true);
         try {
-            const res = await fetch(`${API_URL}/api/auth/google`, {
+            const res = await fetch(`/api/auth/google`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ accessToken: tokenResponse.access_token })
