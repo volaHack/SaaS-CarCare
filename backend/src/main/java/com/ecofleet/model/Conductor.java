@@ -39,4 +39,7 @@ public class Conductor {
 
     // Teléfono de contacto (opcional)
     private String telefono;
+
+    // Google OAuth ID (opcional)
+    private String googleId;
 }

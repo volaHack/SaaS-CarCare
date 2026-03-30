@@ -25,4 +25,7 @@ public interface ConductorRepository extends MongoRepository<Conductor, String> 
     
     // Contar conductores de una empresa
     long countByEmpresaId(String empresaId);
+
+    // Buscar conductor por Google ID
+    Optional<Conductor> findByGoogleId(String googleId);
 }

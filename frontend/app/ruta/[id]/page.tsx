@@ -31,6 +31,7 @@ interface Ruta {
     velocidadActualKmh?: number;
     distanciaRestanteKm?: number;
     ultimaActualizacionGPS?: string;
+    inicioDetencion?: string;
 }
 
 // Helper: calcular tiempo desde última actualización GPS
@@ -77,7 +78,7 @@ export default function RutaTracking() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null); // null = sin error, string = mensaje de error
     const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([]);
-    const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
+    const [, setIsCalculatingRoute] = useState(false);
 
     // useRef para mantener referencias correctamente entre renders
     const isMountedRef = useRef(true);
@@ -162,7 +163,7 @@ export default function RutaTracking() {
             console.log('[RutaTracking] Datos recibidos - Estado:', data.estado, '- GPS:', !!(data.latitudActual && data.longitudActual));
 
             // Calcular ruta según el estado
-            if (data.estado === 'EN_CURSO') {
+            if (data.estado === 'EN_CURSO' || data.estado === 'DETENIDO') {
                 if (data.latitudActual && data.longitudActual && data.latitudDestino && data.longitudDestino) {
                     console.log('[RutaTracking] ✅ GPS REAL detectado');
                     await calcularRutaDinamica(
@@ -301,75 +302,194 @@ export default function RutaTracking() {
 
     return (
         <BackgroundMeteors>
+            <style>{`
+                @keyframes spin { to { transform: rotate(360deg); } }
+                @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+                /* ── HEADER DESKTOP ── */
+                .ruta-header {
+                    display: flex;
+                    align-items: flex-start;
+                    justify-content: space-between;
+                    gap: 1.5rem;
+                    border-bottom: 1px solid rgba(255,255,255,0.05);
+                    padding-bottom: 1.5rem;
+                }
+                .ruta-header-left {
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 1rem;
+                    flex: 1;
+                    min-width: 0;
+                }
+                .ruta-title-h1 {
+                    font-size: 1.7rem;
+                    font-weight: 900;
+                    letter-spacing: -0.02em;
+                    line-height: 1.25;
+                    margin: 0;
+                }
+                .ruta-badges-row {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    flex-wrap: wrap;
+                    margin-bottom: 0.45rem;
+                }
+                .ruta-vehicle-pill {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.6rem;
+                    background: rgba(255,255,255,0.03);
+                    padding: 0.5rem 1rem;
+                    border-radius: 10px;
+                    border: 1px solid rgba(255,255,255,0.05);
+                    white-space: nowrap;
+                }
+                .ruta-back-btn {
+                    width: 40px;
+                    height: 40px;
+                    flex-shrink: 0;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+
+                /* ── GRID PRINCIPAL ── */
+                .ruta-main-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 350px;
+                    gap: 2rem;
+                    margin-top: 2rem;
+                }
+                .ruta-map-box {
+                    height: 600px;
+                    padding: 0;
+                    border-radius: 24px;
+                    overflow: hidden;
+                    border: 1px solid rgba(255,255,255,0.1);
+                    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+                }
+
+                /* ── MÓVIL ── */
+                @media (max-width: 768px) {
+                    .ruta-header {
+                        flex-direction: column;
+                        gap: 0.75rem;
+                        padding-bottom: 1rem;
+                    }
+                    /* Top bar: botón atrás + vehicle pill en la misma fila */
+                    .ruta-header-topbar {
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        width: 100%;
+                    }
+                    /* Título ocupa ancho completo */
+                    .ruta-title-block {
+                        width: 100%;
+                    }
+                    .ruta-title-h1 {
+                        font-size: 1.25rem;
+                        line-height: 1.3;
+                    }
+                    .ruta-vehicle-label { display: none; }
+                    .ruta-vehicle-pill { padding: 0.35rem 0.75rem; font-size: 0.8rem; }
+                    /* Ocultar el bloque vehicle de la derecha en desktop-style */
+                    .ruta-vehicle-desktop { display: none; }
+                    .ruta-vehicle-mobile { display: flex !important; }
+                    .ruta-back-btn { width: 36px !important; height: 36px !important; font-size: 1rem; }
+                    .ruta-main-grid { grid-template-columns: 1fr; gap: 1rem; }
+                    .ruta-map-box { height: 280px !important; border-radius: 16px !important; }
+                }
+                @media (min-width: 769px) {
+                    .ruta-header-topbar { display: contents; }
+                    .ruta-vehicle-mobile { display: none !important; }
+                    .ruta-vehicle-desktop { display: block; }
+                }
+            `}</style>
             <main style={{ height: "100%", width: "100%", overflowY: "auto", position: "relative", zIndex: 20 }}>
                 <div className={styles.container}>
-                    <header className={styles.header} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '2rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                    <header className="ruta-header">
+                        {/* Top bar: botón atrás + vehicle pill (mobile los ve en fila, desktop se distribuye) */}
+                        <div className="ruta-header-topbar">
                             <button
                                 onClick={() => router.push("/")}
-                                className={styles.navButton}
+                                className={`${styles.navButton} ruta-back-btn`}
                                 style={{
                                     background: 'rgba(255,255,255,0.05)',
                                     border: '1px solid rgba(255,255,255,0.1)',
-                                    width: '40px',
-                                    height: '40px',
                                     padding: '0',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    borderRadius: '12px'
+                                    borderRadius: '12px',
                                 }}
                             >
                                 ←
                             </button>
-                            <div className={styles.title}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '0.4rem' }}>
-                                    <span className={styles.badge} style={{
-                                        background: ruta.estado === 'EN_CURSO' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(156, 163, 175, 0.1)',
-                                        color: ruta.estado === 'EN_CURSO' ? '#60a5fa' : '#9ca3af',
-                                        fontSize: '0.65rem'
-                                    }}>
-                                        RUTA #{ruta.id?.slice(-6).toUpperCase()}
-                                    </span>
 
-                                    {ruta.estado === 'EN_CURSO' && (
-                                        <span className={styles.badge} style={{
-                                            background: (ruta.latitudActual && ruta.longitudActual) ?
-                                                'rgba(34, 197, 94, 0.2)' :
-                                                'rgba(251, 191, 36, 0.2)',
-                                            color: (ruta.latitudActual && ruta.longitudActual) ?
-                                                '#22c55e' : '#f59e0b',
-                                            fontSize: '0.6rem',
-                                            fontWeight: '700'
-                                        }}>
-                                            {(ruta.latitudActual && ruta.longitudActual) ?
-                                                '📡 GPS ACTIVO' :
-                                                '⏳ ESPERANDO GPS'}
-                                        </span>
-                                    )}
-
-                                    <span style={{ color: '#4b5563', fontSize: '0.8rem' }}>•</span>
-                                    <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>{ruta.fecha}</span>
-                                </div>
-                                <h1 style={{ fontSize: '2.2rem', fontWeight: '900', letterSpacing: '-0.02em' }}>
-                                    {ruta.origen} <span style={{ color: 'var(--accent)', opacity: 0.5 }}>➝</span> {ruta.destino}
-                                </h1>
+                            {/* Vehicle pill — visible en mobile junto al back btn */}
+                            <div className="ruta-vehicle-mobile" style={{ display: 'none', alignItems: 'center', gap: '0.5rem' }}>
+                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#3bf63b' }}></div>
+                                <span style={{ fontWeight: '700', fontSize: '0.8rem', color: '#e2e8f0' }}>{ruta.vehiculoId?.slice(-10)}</span>
                             </div>
                         </div>
 
-                        <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.4rem' }}>Vehículo Asignado</div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'rgba(255,255,255,0.03)', padding: '0.5rem 1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#3bf63b' }}></div>
-                                <span style={{ fontWeight: '700', fontSize: '0.9rem' }}>{ruta.vehiculoId}</span>
+                        {/* Bloque título — ocupa ancho completo en mobile */}
+                        <div className="ruta-title-block" style={{ flex: 1, minWidth: 0 }}>
+                            <div className="ruta-badges-row">
+                                <span className={styles.badge} style={{
+                                    background: ruta.estado === 'EN_CURSO' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(156, 163, 175, 0.1)',
+                                    color: ruta.estado === 'EN_CURSO' ? '#60a5fa' : '#9ca3af',
+                                    fontSize: '0.65rem'
+                                }}>
+                                    RUTA #{ruta.id?.slice(-6).toUpperCase()}
+                                </span>
+
+                                {(ruta.estado === 'EN_CURSO' || ruta.estado === 'DETENIDO') && (
+                                    <span className={styles.badge} style={{
+                                        background: ruta.estado === 'DETENIDO'
+                                            ? 'rgba(249, 115, 22, 0.2)'
+                                            : (ruta.latitudActual && ruta.longitudActual)
+                                                ? 'rgba(34, 197, 94, 0.2)'
+                                                : 'rgba(251, 191, 36, 0.2)',
+                                        color: ruta.estado === 'DETENIDO'
+                                            ? '#f97316'
+                                            : (ruta.latitudActual && ruta.longitudActual)
+                                                ? '#22c55e' : '#f59e0b',
+                                        fontSize: '0.6rem',
+                                        fontWeight: '700'
+                                    }}>
+                                        {ruta.estado === 'DETENIDO'
+                                            ? '⏸ DETENIDO'
+                                            : (ruta.latitudActual && ruta.longitudActual)
+                                                ? '📡 GPS ACTIVO'
+                                                : '⏳ ESPERANDO GPS'}
+                                    </span>
+                                )}
+
+                                <span style={{ color: '#4b5563', fontSize: '0.75rem' }}>{ruta.fecha?.slice(0, 10)}</span>
+                            </div>
+
+                            <h1 className="ruta-title-h1">
+                                <span style={{ color: '#e2e8f0' }}>{ruta.origen}</span>
+                                {' '}<span style={{ color: 'var(--accent)', opacity: 0.55, fontSize: '0.8em' }}>➝</span>{' '}
+                                <span style={{ color: '#e2e8f0' }}>{ruta.destino}</span>
+                            </h1>
+                        </div>
+
+                        {/* Vehicle pill desktop — oculta en mobile */}
+                        <div className="ruta-vehicle-desktop">
+                            <div className="ruta-vehicle-label" style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.3rem' }}>Vehículo</div>
+                            <div className="ruta-vehicle-pill">
+                                <div style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#3bf63b', flexShrink: 0 }}></div>
+                                <span style={{ fontWeight: '700', fontSize: '0.85rem' }}>{ruta.vehiculoId?.slice(-12)}</span>
                             </div>
                         </div>
                     </header>
 
-                    <div className={styles.rutasContainer} style={{ gridTemplateColumns: '1fr 350px', gap: '2rem', marginTop: '2rem' }}>
+                    <div className="ruta-main-grid">
                         {/* Map Section */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                            <div className={styles.card} style={{ height: '600px', padding: '0', borderRadius: '24px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+                            <div className={`${styles.card} ruta-map-box`}>
                                 <MapTracking
                                     origin={[ruta.latitudOrigen, ruta.longitudOrigen]}
                                     destination={[ruta.latitudDestino, ruta.longitudDestino]}
@@ -383,7 +503,7 @@ export default function RutaTracking() {
                             {typeof window !== 'undefined' && (window as any).AndroidTracker ? (
                                 <button
                                     onClick={async () => {
-                                        if (ruta?.estado === 'EN_CURSO') {
+                                        if (ruta?.estado === 'EN_CURSO' || ruta?.estado === 'DETENIDO') {
                                             (window as any).AndroidTracker.stopTracking();
                                             toast.success('📱 Tracking GPS detenido');
                                         } else {
@@ -393,22 +513,22 @@ export default function RutaTracking() {
                                     }}
                                     style={{
                                         padding: '1.2rem 1.5rem',
-                                        background: ruta?.estado === 'EN_CURSO'
+                                        background: (ruta?.estado === 'EN_CURSO' || ruta?.estado === 'DETENIDO')
                                             ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(220, 38, 38, 0.2))'
                                             : 'linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.2))',
-                                        border: ruta?.estado === 'EN_CURSO'
+                                        border: (ruta?.estado === 'EN_CURSO' || ruta?.estado === 'DETENIDO')
                                             ? '2px solid rgba(239, 68, 68, 0.5)'
                                             : '2px solid rgba(34, 197, 94, 0.5)',
                                         borderRadius: '16px',
                                         fontSize: '1.1rem',
-                                        color: ruta?.estado === 'EN_CURSO' ? '#ef4444' : '#22c55e',
+                                        color: (ruta?.estado === 'EN_CURSO' || ruta?.estado === 'DETENIDO') ? '#ef4444' : '#22c55e',
                                         cursor: 'pointer',
                                         marginBottom: '1rem',
                                         width: '100%',
                                         fontWeight: '800'
                                     }}
                                 >
-                                    {ruta?.estado === 'EN_CURSO'
+                                    {(ruta?.estado === 'EN_CURSO' || ruta?.estado === 'DETENIDO')
                                         ? '📱 DETENER TRACKING GPS ANDROID'
                                         : '📱 INICIAR TRACKING GPS ANDROID'}
                                 </button>
@@ -453,7 +573,10 @@ export default function RutaTracking() {
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
                                             <span style={{ fontSize: '0.8rem', color: '#6b7280', fontWeight: '600' }}>PROGRESS TRACKER</span>
                                             <span style={{ fontSize: '0.8rem', color: 'var(--accent)', fontWeight: '700' }}>
-                                                {ruta.estado === 'EN_CURSO' && ruta.latitudActual ? `${progreso.toFixed(0)}%` : ruta.estado === 'EN_CURSO' ? 'ESPERANDO GPS' : 'SIN INICIAR'}
+                                                {ruta.estado === 'DETENIDO' ? `${progreso.toFixed(0)}% — DETENIDO`
+                                                    : ruta.estado === 'EN_CURSO' && ruta.latitudActual ? `${progreso.toFixed(0)}%`
+                                                    : ruta.estado === 'EN_CURSO' ? 'ESPERANDO GPS'
+                                                    : 'SIN INICIAR'}
                                             </span>
                                         </div>
                                         <div style={{ height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden', position: 'relative' }}>
@@ -488,6 +611,22 @@ export default function RutaTracking() {
                                     <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
                                     Telemetría Real
                                 </h3>
+
+                                {ruta.estado === 'DETENIDO' && (
+                                    <div style={{ background: 'rgba(249, 115, 22, 0.1)', color: '#f97316', padding: '1rem', borderRadius: '12px', marginBottom: '1rem', border: '1px solid rgba(249, 115, 22, 0.25)' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '800', fontSize: '0.85rem' }}>
+                                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1" strokeWidth="2"/><rect x="14" y="4" width="4" height="16" rx="1" strokeWidth="2"/></svg>
+                                            VEHÍCULO DETENIDO
+                                        </div>
+                                        <p style={{ fontSize: '0.75rem', marginTop: '0.4rem', opacity: 0.8 }}>
+                                            Sin movimiento hace más de 5 minutos.
+                                            {ruta.inicioDetencion && (() => {
+                                                const mins = Math.floor((Date.now() - new Date(ruta.inicioDetencion).getTime()) / 60000);
+                                                return mins > 0 ? ` Parado hace ${mins} min.` : '';
+                                            })()}
+                                        </p>
+                                    </div>
+                                )}
 
                                 {ruta.desviado && (
                                     <div style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '1rem', borderRadius: '12px', marginBottom: '1.5rem', border: '1px solid rgba(239, 68, 68, 0.2)', animation: 'pulse 2s infinite' }}>
@@ -588,7 +727,7 @@ export default function RutaTracking() {
                                             </div>
 
                                             {/* ETA Card */}
-                                            {ruta.estado === 'EN_CURSO' && ruta.distanciaRestanteKm !== undefined && (
+                                            {(ruta.estado === 'EN_CURSO' || ruta.estado === 'DETENIDO') && ruta.distanciaRestanteKm !== undefined && (
                                                 <div style={{ padding: '1rem', background: 'linear-gradient(135deg, rgba(59, 246, 59, 0.05), rgba(34, 197, 94, 0.08))', borderRadius: '12px', border: '1px solid rgba(59, 246, 59, 0.15)' }}>
                                                     <span style={{ display: 'block', fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.4rem' }}>Tiempo Estimado Llegada</span>
                                                     <span style={{ fontSize: '1.5rem', fontWeight: '800', color: '#3bf63b' }}>
@@ -611,13 +750,13 @@ export default function RutaTracking() {
                                         style={{
                                             height: '54px',
                                             fontSize: '1rem',
-                                            backgroundColor: ruta.estado === 'EN_CURSO' ? 'rgba(239, 68, 68, 0.1)' : '#3bf63b',
-                                            color: ruta.estado === 'EN_CURSO' ? '#ef4444' : '#000',
-                                            border: ruta.estado === 'EN_CURSO' ? '1px solid #ef4444' : 'none',
-                                            boxShadow: ruta.estado === 'EN_CURSO' ? 'none' : '0 10px 20px -5px rgba(59, 246, 59, 0.3)'
+                                            backgroundColor: (ruta.estado === 'EN_CURSO' || ruta.estado === 'DETENIDO') ? 'rgba(239, 68, 68, 0.1)' : '#3bf63b',
+                                            color: (ruta.estado === 'EN_CURSO' || ruta.estado === 'DETENIDO') ? '#ef4444' : '#000',
+                                            border: (ruta.estado === 'EN_CURSO' || ruta.estado === 'DETENIDO') ? '1px solid #ef4444' : 'none',
+                                            boxShadow: (ruta.estado === 'EN_CURSO' || ruta.estado === 'DETENIDO') ? 'none' : '0 10px 20px -5px rgba(59, 246, 59, 0.3)'
                                         }}
                                         onClick={async () => {
-                                            const nuevoEstado = ruta.estado === 'EN_CURSO' ? 'PLANIFICADA' : 'EN_CURSO';
+                                            const nuevoEstado = (ruta.estado === 'EN_CURSO' || ruta.estado === 'DETENIDO') ? 'PLANIFICADA' : 'EN_CURSO';
 
                                             if (typeof window !== 'undefined' && (window as any).AndroidTracker) {
                                                 if (nuevoEstado === 'EN_CURSO') {
@@ -632,11 +771,11 @@ export default function RutaTracking() {
                                                 headers: getAuthHeaders() as any,
                                                 body: JSON.stringify({ estado: nuevoEstado })
                                             });
-                                            setRuta({ ...ruta, estado: nuevoEstado });
+                                            setRuta({ ...ruta, estado: nuevoEstado, inicioDetencion: undefined });
                                             toast.info(`Sistema ${nuevoEstado === 'EN_CURSO' ? 'Activado' : 'Desactivado'}`);
                                         }}
                                     >
-                                        {ruta.estado === 'EN_CURSO' ? 'DETENER RASTREO' : 'ACTIVAR GPS / INICIAR'}
+                                        {(ruta.estado === 'EN_CURSO' || ruta.estado === 'DETENIDO') ? 'DETENER RASTREO' : 'ACTIVAR GPS / INICIAR'}
                                     </button>
 
                                     <button

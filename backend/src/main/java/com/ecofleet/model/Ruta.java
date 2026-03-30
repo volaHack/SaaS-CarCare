@@ -15,7 +15,7 @@ public class Ruta {
     private String origen;
     private String destino;
     private Double distanciaEstimadaKm;
-    private String estado; // "PLANIFICADA", "EN_PROCESO", "COMPLETADA"
+    private String estado; // "PLANIFICADA", "EN_CURSO", "DETENIDO", "COMPLETADA"
     
     private String vehiculoId; // Vehiculo asignado
     private String fecha;
@@ -34,6 +34,9 @@ public class Ruta {
     // Timestamp de la última actualización GPS recibida
     private String ultimaActualizacionGPS;
     
+    // Timestamp de inicio de detención (para detectar paradas de 5+ min)
+    private String inicioDetencion;
+
     // Datos calculados en tiempo real
     private Double velocidadActualKmh; // Velocidad calculada en km/h
     private Double distanciaRestanteKm; // Distancia restante hasta el destino
@@ -89,4 +92,7 @@ public class Ruta {
     
     public Double getDistanciaRestanteKm() { return distanciaRestanteKm; }
     public void setDistanciaRestanteKm(Double distanciaRestanteKm) { this.distanciaRestanteKm = distanciaRestanteKm; }
+
+    public String getInicioDetencion() { return inicioDetencion; }
+    public void setInicioDetencion(String inicioDetencion) { this.inicioDetencion = inicioDetencion; }
 }

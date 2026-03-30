@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import Link from "next/link";
 import styles from "../../login/login.module.css";
+import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production.up.railway.app";
 
@@ -16,10 +17,43 @@ const CarIcon = () => (
     </svg>
 );
 
-export default function DriverLoginPage() {
+const GoogleIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
+        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+    </svg>
+);
+
+function GoogleButton({ onSuccess, disabled, label }: { onSuccess: (resp: { access_token: string }) => void; disabled: boolean; label: string }) {
+    const login = useGoogleLogin({
+        onSuccess,
+        onError: () => toast.error("Error al iniciar sesión con Google"),
+    });
+
+    return (
+        <button
+            type="button"
+            className={styles.googleBtn}
+            onClick={() => login()}
+            disabled={disabled}
+        >
+            <GoogleIcon />
+            <span>{label}</span>
+        </button>
+    );
+}
+
+function DriverLoginInner() {
     const router = useRouter();
     const [isRegistering, setIsRegistering] = useState(false);
     const [loading, setLoading] = useState(false);
+
+    // Estado extra para Google register: pedir empresaEmail si es cuenta nueva
+    const [needsEmpresaEmail, setNeedsEmpresaEmail] = useState(false);
+    const [pendingToken, setPendingToken] = useState<string | null>(null);
+    const [empresaEmailGoogle, setEmpresaEmailGoogle] = useState("");
 
     const [loginData, setLoginData] = useState({ email: "", password: "" });
     const [registerData, setRegisterData] = useState({
@@ -29,31 +63,66 @@ export default function DriverLoginPage() {
         empresaEmail: ""
     });
 
-    // Fetch con timeout de 15 segundos
     const fetchWithTimeout = async (url: string, options: RequestInit) => {
         const controller = new AbortController();
-        // Aumentamos timeout a 60s para soportar cold starts de Railway
         const timeout = setTimeout(() => controller.abort(), 60000);
-
         try {
             const res = await fetch(url, { ...options, signal: controller.signal });
             clearTimeout(timeout);
             return res;
         } catch (err: any) {
             clearTimeout(timeout);
-            if (err.name === 'AbortError') {
-                throw new Error('El servidor está tardando en responder. Puede estar iniciándose (Cold Start), por favor intenta de nuevo en unos segundos.');
-            }
+            if (err.name === 'AbortError') throw new Error('El servidor está tardando en responder. Intenta de nuevo.');
             throw err;
         }
+    };
+
+    const handleGoogleSuccess = async (tokenResponse: { access_token: string }, empresaEmail?: string) => {
+        setLoading(true);
+        try {
+            const body: Record<string, string> = { accessToken: tokenResponse.access_token };
+            if (empresaEmail) body.empresaEmail = empresaEmail;
+
+            const res = await fetch(`/api/auth/google/conductor`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                localStorage.setItem("user", JSON.stringify(data));
+                toast.success(`¡Bienvenido, ${data.nombre}!`);
+                window.dispatchEvent(new Event("storage"));
+                router.push("/conductor");
+            } else if (data.error === "NEEDS_EMPRESA_EMAIL") {
+                // Primera vez con Google — pedir email de empresa
+                setPendingToken(tokenResponse.access_token);
+                setNeedsEmpresaEmail(true);
+                toast.info("Introduce el email de tu empresa para vincularte a la flota.");
+            } else {
+                toast.error(data.message || data.error || "Error al iniciar sesión con Google");
+            }
+        } catch (error) {
+            toast.error("Error de conexión con el servidor");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleConfirmEmpresaEmail = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!pendingToken || !empresaEmailGoogle.trim()) return;
+        await handleGoogleSuccess({ access_token: pendingToken }, empresaEmailGoogle.trim().toLowerCase());
+        setNeedsEmpresaEmail(false);
+        setPendingToken(null);
+        setEmpresaEmailGoogle("");
     };
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-
         try {
-            // IMPORTANTE: Usamos el endpoint específico para conductores
             const res = await fetchWithTimeout(`${API_URL}/api/auth/login/conductor`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -62,9 +131,7 @@ export default function DriverLoginPage() {
                     password: loginData.password
                 })
             });
-
             const data = await res.json();
-
             if (res.ok) {
                 localStorage.setItem("user", JSON.stringify(data));
                 toast.success(`¡Bienvenido, ${data.nombre}!`);
@@ -74,7 +141,6 @@ export default function DriverLoginPage() {
                 toast.error(data.error || "Error al iniciar sesión");
             }
         } catch (error: any) {
-            console.error("[LOGIN]", error);
             toast.error(error.message || "Error de conexión");
         } finally {
             setLoading(false);
@@ -83,15 +149,11 @@ export default function DriverLoginPage() {
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        // Validación cliente
         if (registerData.password.length < 6) {
             toast.error("La contraseña debe tener mínimo 6 caracteres");
             return;
         }
-
         setLoading(true);
-
         try {
             const res = await fetchWithTimeout(`${API_URL}/api/auth/register/conductor`, {
                 method: "POST",
@@ -103,9 +165,7 @@ export default function DriverLoginPage() {
                     empresaEmail: registerData.empresaEmail.trim().toLowerCase()
                 })
             });
-
             const data = await res.json();
-
             if (res.ok) {
                 toast.success("✅ ¡Cuenta creada! Ahora inicia sesión.");
                 setIsRegistering(false);
@@ -115,36 +175,80 @@ export default function DriverLoginPage() {
                 toast.error(data.error || "Error al registrarse");
             }
         } catch (error: any) {
-            console.error("[REGISTER]", error);
             toast.error(error.message || "Error de conexión");
         } finally {
             setLoading(false);
         }
     };
 
+    // Modal: pedir empresaEmail cuando es primera vez con Google
+    if (needsEmpresaEmail) {
+        return (
+            <main className={styles.mainContainer}>
+                <div className={styles.visualPanel}>
+                    <div className={styles.bgImageContainer}>
+                        <img src="/login-bg.jpg" alt="Fondo" className={styles.bgImage} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                    <div className={styles.visualContent}>
+                        <div className={styles.brandLogo}><CarIcon /><span>CarCare Driver</span></div>
+                    </div>
+                    <div className={styles.visualPattern} />
+                </div>
+                <div className={styles.formPanel}>
+                    <div className={styles.formContent}>
+                        <div className={styles.header}>
+                            <h2 className={styles.title}>Vincular a la flota</h2>
+                            <p className={styles.subtitle}>Introduce el email de tu empresa para completar el registro.</p>
+                        </div>
+                        <form onSubmit={handleConfirmEmpresaEmail} className={styles.form}>
+                            <div className={styles.inputGroup}>
+                                <label style={{ color: '#3bf63b' }}>Email de la Empresa</label>
+                                <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.5rem' }}>
+                                    Pídeselo a tu gestor de flota.
+                                </p>
+                                <input
+                                    type="email"
+                                    required
+                                    placeholder="admin@empresa.com"
+                                    value={empresaEmailGoogle}
+                                    onChange={(e) => setEmpresaEmailGoogle(e.target.value)}
+                                    style={{ borderColor: '#3bf63b' }}
+                                    disabled={loading}
+                                    autoFocus
+                                />
+                            </div>
+                            <button type="submit" className={styles.submitBtn} disabled={loading}>
+                                {loading ? "Vinculando..." : "Unirse a la Flota"}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setNeedsEmpresaEmail(false); setPendingToken(null); }}
+                                style={{ width: '100%', marginTop: '0.75rem', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '0.85rem' }}
+                            >
+                                Cancelar
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </main>
+        );
+    }
+
     return (
         <main className={styles.mainContainer}>
             {/* Panel Visual */}
             <div className={styles.visualPanel}>
                 <div className={styles.bgImageContainer}>
-                    <img
-                        src="/login-bg.jpg"
-                        alt="Fondo"
-                        className={styles.bgImage}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
+                    <img src="/login-bg.jpg" alt="Fondo" className={styles.bgImage} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
-
                 <div className={styles.visualContent}>
                     <div className={styles.brandLogo}>
                         <CarIcon />
                         <span>CarCare Driver</span>
                     </div>
-
                     <div className={styles.quoteBox}>
                         <h1>Tu ruta, optimizada.</h1>
                         <p>Únete a la flota de tu empresa y recibe tus rutas en tiempo real.</p>
-
                         <div style={{ marginTop: '2rem', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '12px' }}>
                             <h3 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: '#3bf63b' }}>¿Cómo funciona?</h3>
                             <ul style={{ fontSize: '0.8rem', color: '#94a3b8', paddingLeft: '1.2rem', lineHeight: '1.6' }}>
@@ -155,7 +259,6 @@ export default function DriverLoginPage() {
                         </div>
                     </div>
                 </div>
-                {/* Overlay pattern for readability */}
                 <div className={styles.visualPattern} />
             </div>
 
@@ -174,6 +277,17 @@ export default function DriverLoginPage() {
                                 {isRegistering ? "Inicia sesión aquí" : "Regístrate aquí"}
                             </button>
                         </p>
+                    </div>
+
+                    {/* Google OAuth */}
+                    <GoogleButton
+                        onSuccess={(t) => handleGoogleSuccess(t)}
+                        disabled={loading}
+                        label={isRegistering ? "Registrarse con Google" : "Continuar con Google"}
+                    />
+
+                    <div className={styles.oauthDivider}>
+                        <span>o continuar con email</span>
                     </div>
 
                     {!isRegistering ? (
@@ -269,5 +383,14 @@ export default function DriverLoginPage() {
                 </div>
             </div>
         </main>
+    );
+}
+
+export default function DriverLoginPage() {
+    const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
+    return (
+        <GoogleOAuthProvider clientId={googleClientId}>
+            <DriverLoginInner />
+        </GoogleOAuthProvider>
     );
 }

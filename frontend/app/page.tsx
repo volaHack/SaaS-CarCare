@@ -89,8 +89,11 @@ const PackageIcon = () => (
 );
 
 const AndroidIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M17.523 15.34c-.5 0-.908-.406-.908-.907s.408-.907.908-.907c.502 0 .907.405.907.907 0 .502-.405.907-.907.907m-11.046 0c-.503 0-.908-.406-.908-.907s.405-.907.908-.907c.5 0 .907.405.907.907 0 .502-.407.907-.907.907M17.97 6.88l1.97-3.415c.11-.19.045-.434-.145-.544-.19-.11-.434-.045-.543.145L17.25 6.553c-1.543-.7-3.285-1.093-5.25-1.093s-3.707.393-5.25 1.093L4.748 3.066c-.11-.19-.354-.255-.543-.145-.19.11-.256.354-.145.544L6.03 6.88C2.57 8.55.27 11.945.07 16h23.86c-.2-4.055-2.5-7.45-5.96-9.12" />
+  <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none">
+    <path d="M3 20.5V3.5C3 2.91 3.34 2.39 3.84 2.15L13.69 12L3.84 21.85C3.34 21.6 3 21.09 3 20.5Z" fill="#4285F4"/>
+    <path d="M16.81 15.12L6.05 21.34L13.69 12L16.81 15.12Z" fill="#EA4335"/>
+    <path d="M20.16 10.81C20.5 11.08 20.5 11.57 20.5 12C20.5 12.43 20.38 12.78 20.16 13.19L17.89 14.5L14.5 12L17.89 9.5L20.16 10.81Z" fill="#FBBC05"/>
+    <path d="M6.05 2.66L16.81 8.88L13.69 12L6.05 2.66Z" fill="#34A853"/>
   </svg>
 );
 
@@ -257,7 +260,7 @@ export default function LandingPage() {
               <span className={styles.ctaArrow}><ArrowRightIcon /></span>
             </button>
             <a href="#download" className={styles.secondaryCta}>
-              <span className={styles.androidIcon}><SmartphoneIcon /></span>
+              <span className={styles.androidIcon}><AndroidIcon /></span>
               <span>Descargar para Android</span>
             </a>
           </div>

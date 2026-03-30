@@ -57,6 +57,10 @@ public class RutaController {
                     
                     if (rutaActualizada.getEstado() != null) {
                         ruta.setEstado(rutaActualizada.getEstado());
+                        // Resetear detención al cambiar estado manualmente
+                        if ("EN_CURSO".equals(rutaActualizada.getEstado())) {
+                            ruta.setInicioDetencion(null);
+                        }
                     }
                     
                     // Calcular velocidad y distancia si se reciben nuevas coordenadas GPS
@@ -143,47 +147,80 @@ public class RutaController {
                     Double latitudAnterior = ruta.getLatitudActual();
                     Double longitudAnterior = ruta.getLongitudActual();
                     String timestampAnterior = ruta.getUltimaActualizacionGPS();
-                    
+
                     // Actualizar posición actual
                     ruta.setLatitudActual(gps.getLatitud());
                     ruta.setLongitudActual(gps.getLongitud());
-                    
+
                     // Guardar timestamp actual
                     String timestampActual = Instant.now().toString();
                     ruta.setUltimaActualizacionGPS(timestampActual);
-                    
+
+                    // Calcular distancia recorrida desde última posición
+                    double distanciaRecorrida = 0;
+
                     // Calcular velocidad si tenemos posición y timestamp anterior
                     if (latitudAnterior != null && longitudAnterior != null && timestampAnterior != null) {
                         try {
-                            // Calcular distancia recorrida en km
-                            double distanciaRecorrida = calcularDistancia(
+                            distanciaRecorrida = calcularDistancia(
                                 latitudAnterior, longitudAnterior,
                                 gps.getLatitud(), gps.getLongitud()
                             );
-                            
-                            // Calcular tiempo transcurrido en horas
+
                             Instant instanteAnterior = Instant.parse(timestampAnterior);
                             Instant instanteActual = Instant.parse(timestampActual);
                             double segundosTranscurridos = (instanteActual.toEpochMilli() - instanteAnterior.toEpochMilli()) / 1000.0;
                             double horasTranscurridas = segundosTranscurridos / 3600.0;
-                            
-                            // Calcular velocidad en km/h (solo si hay movimiento significativo)
-                            if (horasTranscurridas > 0 && distanciaRecorrida > 0.001) { // Más de 1 metro
+
+                            if (horasTranscurridas > 0 && distanciaRecorrida > 0.001) {
                                 double velocidad = distanciaRecorrida / horasTranscurridas;
-                                // Limitar a valores razonables (0-200 km/h)
                                 velocidad = Math.max(0, Math.min(200, velocidad));
                                 ruta.setVelocidadActualKmh(velocidad);
                             } else {
-                                ruta.setVelocidadActualKmh(0.0); // Detenido
+                                ruta.setVelocidadActualKmh(0.0);
                             }
                         } catch (Exception e) {
                             System.err.println("[RutaController] Error calculando velocidad: " + e.getMessage());
                             ruta.setVelocidadActualKmh(0.0);
                         }
                     } else {
-                        ruta.setVelocidadActualKmh(0.0); // Primera actualización GPS
+                        ruta.setVelocidadActualKmh(0.0);
                     }
-                    
+
+                    // ═══ DETECCIÓN DE INACTIVIDAD (5 min sin moverse) ═══
+                    // Si la ruta está EN_CURSO o DETENIDO, evaluar movimiento
+                    if ("EN_CURSO".equals(ruta.getEstado()) || "DETENIDO".equals(ruta.getEstado())) {
+                        if (distanciaRecorrida > 0.005) { // Más de 5 metros = movimiento real
+                            // Hay movimiento → si estaba DETENIDO, reactivar
+                            if ("DETENIDO".equals(ruta.getEstado())) {
+                                ruta.setEstado("EN_CURSO");
+                                System.out.println("[RutaController] ▶ Ruta REACTIVADA - movimiento detectado");
+                            }
+                            // Resetear el timestamp de inicio de parada
+                            ruta.setInicioDetencion(null);
+                        } else {
+                            // Sin movimiento significativo
+                            if (ruta.getInicioDetencion() == null) {
+                                // Primera detección de parada: marcar inicio
+                                ruta.setInicioDetencion(timestampActual);
+                            } else {
+                                // Ya estaba parado: verificar si pasaron 5 minutos
+                                try {
+                                    Instant inicioParada = Instant.parse(ruta.getInicioDetencion());
+                                    Instant ahora = Instant.parse(timestampActual);
+                                    long segundosDetenido = (ahora.toEpochMilli() - inicioParada.toEpochMilli()) / 1000;
+
+                                    if (segundosDetenido >= 300 && "EN_CURSO".equals(ruta.getEstado())) {
+                                        ruta.setEstado("DETENIDO");
+                                        System.out.println("[RutaController] ⏸ Ruta DETENIDA - " + segundosDetenido + "s sin movimiento");
+                                    }
+                                } catch (Exception e) {
+                                    System.err.println("[RutaController] Error evaluando detencion: " + e.getMessage());
+                                }
+                            }
+                        }
+                    }
+
                     // Calcular distancia restante al destino
                     if (ruta.getLatitudDestino() != null && ruta.getLongitudDestino() != null) {
                         double distanciaRestante = calcularDistancia(
@@ -192,21 +229,20 @@ public class RutaController {
                         );
                         ruta.setDistanciaRestanteKm(distanciaRestante);
                     }
-                    
+
                     // Calcular si está desviado
                     if (ruta.getLatitudOrigen() != null && ruta.getLongitudOrigen() != null &&
                         ruta.getLatitudDestino() != null && ruta.getLongitudDestino() != null) {
-                        
+
                         double distanciaTotal = calcularDistancia(
                             ruta.getLatitudOrigen(), ruta.getLongitudOrigen(),
                             ruta.getLatitudDestino(), ruta.getLongitudDestino()
                         );
                         double distanciaActualADestino = ruta.getDistanciaRestanteKm();
-                        
-                        // Si la distancia actual es mayor que la distancia total + 20% margen, está desviado
+
                         ruta.setDesviado(distanciaActualADestino > (distanciaTotal * 1.2));
                     }
-                    
+
                     return rutaRepository.save(ruta);
                 })
                 .orElse(null);

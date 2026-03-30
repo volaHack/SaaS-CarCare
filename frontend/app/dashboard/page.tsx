@@ -8,8 +8,6 @@ import BackgroundMeteors from "@/componentes/BackgroundMeteors";
 import LocationInput from "@/componentes/LocationInput";
 import dynamic from "next/dynamic";
 import {
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -48,6 +46,16 @@ interface Ruta {
   ultimaActualizacionGPS?: string;
 }
 
+interface Repostaje {
+  id: string;
+  fecha: string;
+  litros: number;
+  precioPorLitro: number;
+  costeTotal: number;
+  kilometrajeActual: number;
+  vehiculoId: string;
+}
+
 // Dynamic import para el mapa de tracking global (evitar SSR)
 const MapTrackingGlobal = dynamic(() => import("@/componentes/MapTrackingGlobal"), {
   ssr: false,
@@ -74,6 +82,7 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<'flota' | 'nuevo' | 'rutas' | 'estadisticas' | 'tracking'>('flota');
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
   const [rutas, setRutas] = useState<Ruta[]>([]);
+  const [repostajes, setRepostajes] = useState<Repostaje[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Helper to get auth headers
@@ -159,73 +168,105 @@ export default function Dashboard() {
     }
   };
 
+  // ═══ DATOS PARA ESTADÍSTICAS ═══
+  // Datos manuales persistidos en localStorage (el usuario puede editar desde la UI)
+  const [datosManual, setDatosManual] = useState<number[]>(() => {
+    if (typeof window === 'undefined') return new Array(12).fill(0);
+    try {
+      const saved = localStorage.getItem('carcare_consumo_manual');
+      return saved ? JSON.parse(saved) : new Array(12).fill(0);
+    } catch { return new Array(12).fill(0); }
+  });
+
+  const [editandoMes, setEditandoMes] = useState<number | null>(null);
+  const [inputConsumo, setInputConsumo] = useState('');
+
+  const guardarDatoManual = (mesIndex: number, valor: number) => {
+    const nuevo = [...datosManual];
+    nuevo[mesIndex] = valor;
+    setDatosManual(nuevo);
+    localStorage.setItem('carcare_consumo_manual', JSON.stringify(nuevo));
+    setEditandoMes(null);
+    setInputConsumo('');
+    toast.success(`Consumo de ${nombresMeses[mesIndex]} actualizado`);
+  };
+
+  const nombresMeses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+  const mesActual = new Date().getMonth();
+
   const datosGrafico = useMemo(() => {
-    const nombresMeses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-    const consumoRealPorMes = new Array(12).fill(0);
+    const añoActual = new Date().getFullYear();
+    const consumoPorMes = new Array(12).fill(0);
 
-    // DATOS DE PRUEBA TEMPORALES 
-    const datosPrueba = [
-      { mes: 0, distancia: 20 },
-      { mes: 1, distancia: 180 },
-      { mes: 2, distancia: 3520 },
-      { mes: 3, distancia: 150 },
-      { mes: 4, distancia: 980 },
-      { mes: 5, distancia: 5500 },
-    ];
-
-    datosPrueba.forEach(dato => {
-      const consumoEstimado = (dato.distancia / 100) * 8;
-      consumoRealPorMes[dato.mes] += consumoEstimado;
+    // 1. Datos reales desde repostajes
+    repostajes.forEach(rep => {
+      if (!rep.fecha) return;
+      const d = new Date(rep.fecha);
+      if (d.getFullYear() === añoActual) {
+        consumoPorMes[d.getMonth()] += rep.litros || 0;
+      }
     });
 
+    // 2. Datos estimados desde rutas completadas (si no hay repostajes ese mes)
     rutas.forEach(r => {
       if (!r.fecha || r.estado !== 'COMPLETADA') return;
       const d = new Date(r.fecha);
-      const mesIndex = d.getMonth();
-      const consumoEstimado = (r.distanciaEstimadaKm / 100) * 8;
-      consumoRealPorMes[mesIndex] += consumoEstimado;
+      if (d.getFullYear() === añoActual) {
+        // Solo estimar si no hay repostajes reales ese mes
+        if (consumoPorMes[d.getMonth()] === 0) {
+          consumoPorMes[d.getMonth()] += (r.distanciaEstimadaKm / 100) * 8;
+        }
+      }
     });
 
-    return nombresMeses.map((mes, index) => {
-      const consumoReal = Math.round(consumoRealPorMes[index]);
-      let suma = 0;
-      let conteo = 0;
-      for (let i = 1; i <= 3; i++) {
-        const idxAnterior = index - i;
-        if (idxAnterior >= 0) {
-          suma += consumoRealPorMes[idxAnterior];
-          conteo++;
+    // 3. Datos manuales (sobreescriben si el usuario los puso)
+    datosManual.forEach((val, i) => {
+      if (val > 0) consumoPorMes[i] = val;
+    });
+
+    // 4. Generar predicción (media móvil de 3 meses anteriores con datos)
+    return nombresMeses.map((mes, i) => {
+      const consumo = Math.round(consumoPorMes[i] * 10) / 10;
+
+      // Predicción: promedio de los últimos 3 meses con datos
+      const mesesAnteriores: number[] = [];
+      for (let j = 1; j <= 3; j++) {
+        if (i - j >= 0 && consumoPorMes[i - j] > 0) {
+          mesesAnteriores.push(consumoPorMes[i - j]);
         }
       }
-      let prediccionCalculada = 0;
-      if (conteo > 0) {
-        prediccionCalculada = suma / conteo;
+
+      let prediccion = 0;
+      if (mesesAnteriores.length > 0) {
+        prediccion = mesesAnteriores.reduce((a, b) => a + b, 0) / mesesAnteriores.length;
       }
-      const fechaActual = new Date();
-      if (index === fechaActual.getMonth()) {
-        const diaActual = fechaActual.getDate();
-        const diasEnMes = new Date(fechaActual.getFullYear(), fechaActual.getMonth() + 1, 0).getDate();
-        const proyeccion = (consumoReal / Math.max(1, diaActual)) * diasEnMes;
-        if (conteo === 0 || proyeccion > prediccionCalculada) {
-          prediccionCalculada = proyeccion;
-        }
-      } else if (conteo === 0) {
-        prediccionCalculada = consumoReal || 0;
+
+      // Para el mes actual: proyectar el consumo parcial al mes completo
+      if (i === mesActual && consumo > 0) {
+        const diaActual = new Date().getDate();
+        const diasEnMes = new Date(new Date().getFullYear(), i + 1, 0).getDate();
+        const proyeccion = (consumo / Math.max(1, diaActual)) * diasEnMes;
+        if (proyeccion > prediccion) prediccion = proyeccion;
       }
 
       return {
         mes,
-        consumo: consumoReal,
-        prediccion: Math.round(prediccionCalculada)
+        consumo,
+        prediccion: Math.round(prediccion * 10) / 10,
+        esMesActual: i === mesActual,
+        esManual: datosManual[i] > 0,
       };
     });
-  }, [rutas]);
+  }, [rutas, repostajes, datosManual, mesActual, nombresMeses]);
 
-  const indexMesCero = datosGrafico.findIndex(d => d.consumo === 0);
-  const indexFinal = indexMesCero !== -1 ? indexMesCero : new Date().getMonth();
-  const datosMesActual = datosGrafico[indexFinal] || { consumo: 0, prediccion: 0 };
-  const prediccionMesActual = datosMesActual.prediccion;
-  const ahorroPotencial = Math.round(prediccionMesActual * 0.10);
+  // KPIs calculados
+  const consumoTotal = datosGrafico.reduce((a, d) => a + d.consumo, 0);
+  const mesesConDatos = datosGrafico.filter(d => d.consumo > 0).length;
+  const consumoMedio = mesesConDatos > 0 ? Math.round(consumoTotal / mesesConDatos) : 0;
+  const consumoMesActual = datosGrafico[mesActual]?.consumo || 0;
+  const prediccionMesActual = datosGrafico[mesActual]?.prediccion || 0;
+  const ahorroPotencial = prediccionMesActual > consumoMesActual
+    ? Math.round(prediccionMesActual - consumoMesActual) : 0;
 
   const [nuevoVehiculo, setNuevoVehiculo] = useState<Partial<Vehiculo>>({
     marca: '', modelo: '', matricula: '', kilometraje: 0, combustibleActual: 50, activo: true
@@ -237,9 +278,10 @@ export default function Dashboard() {
   const cargarDatos = useCallback(async () => {
     setLoading(true);
     try {
-      const [resVehiculos, resRutas] = await Promise.all([
+      const [resVehiculos, resRutas, resRepostajes] = await Promise.all([
         fetch(`${API_URL}/api/vehiculos`, { headers: getAuthHeaders() }),
-        fetch(`${API_URL}/api/rutas`, { headers: getAuthHeaders() })
+        fetch(`${API_URL}/api/rutas`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/repostajes`, { headers: getAuthHeaders() })
       ]);
 
       if (resVehiculos.ok) {
@@ -252,6 +294,11 @@ export default function Dashboard() {
       if (resRutas.ok) {
         const dataR = await resRutas.json();
         setRutas(dataR);
+      }
+
+      if (resRepostajes.ok) {
+        const dataRep = await resRepostajes.json();
+        setRepostajes(dataRep);
       }
     } catch (err) {
       console.error("Error conectando con el Backend:", err);
@@ -706,6 +753,7 @@ export default function Dashboard() {
                 <div className={styles.grid}>
                   {rutas.map(r => {
                     const esEnCurso = r.estado === 'EN_CURSO';
+                    const esDetenido = r.estado === 'DETENIDO';
                     const esCompletada = r.estado === 'COMPLETADA';
 
                     return (
@@ -753,23 +801,25 @@ export default function Dashboard() {
                           <div
                             className={styles.fuelBarFill}
                             style={{
-                              width: esCompletada ? '100%' : (esEnCurso ? '60%' : '30%'),
-                              backgroundColor: esCompletada ? '#22c55e' : (esEnCurso ? '#06b6d4' : '#6b7280')
+                              width: esCompletada ? '100%' : ((esEnCurso || esDetenido) ? '60%' : '30%'),
+                              backgroundColor: esCompletada ? '#22c55e' : (esDetenido ? '#f97316' : (esEnCurso ? '#06b6d4' : '#6b7280'))
                             }}
                           />
                         </div>
 
-                        {esEnCurso && (
+                        {(esEnCurso || esDetenido) && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '0.5rem' }}>
                             <span style={{
                               width: '8px',
                               height: '8px',
                               borderRadius: '50%',
-                              backgroundColor: '#3bf63b',
-                              boxShadow: '0 0 10px #3bf63b',
-                              animation: 'pulse 1.5s infinite'
+                              backgroundColor: esDetenido ? '#f97316' : '#3bf63b',
+                              boxShadow: esDetenido ? '0 0 10px #f97316' : '0 0 10px #3bf63b',
+                              animation: esDetenido ? 'none' : 'pulse 1.5s infinite'
                             }}></span>
-                            <span style={{ fontSize: '0.7rem', color: '#3bf63b', fontWeight: '800', letterSpacing: '0.05em' }}>RASTREO ACTIVO</span>
+                            <span style={{ fontSize: '0.7rem', color: esDetenido ? '#f97316' : '#3bf63b', fontWeight: '800', letterSpacing: '0.05em' }}>
+                              {esDetenido ? 'VEHÍCULO DETENIDO' : 'RASTREO ACTIVO'}
+                            </span>
                           </div>
                         )}
 
@@ -777,12 +827,12 @@ export default function Dashboard() {
                           <span
                             className={styles.badge}
                             style={{
-                              backgroundColor: esCompletada ? 'rgba(34, 197, 94, 0.2)' : (esEnCurso ? 'rgba(6, 182, 212, 0.2)' : 'rgba(107, 114, 128, 0.2)'),
-                              color: esCompletada ? '#4ade80' : (esEnCurso ? '#22d3ee' : '#9ca3af'),
-                              boxShadow: esCompletada ? '0 0 10px rgba(34, 197, 94, 0.2)' : (esEnCurso ? '0 0 10px rgba(6, 182, 212, 0.2)' : 'none'),
+                              backgroundColor: esCompletada ? 'rgba(34, 197, 94, 0.2)' : (esDetenido ? 'rgba(249, 115, 22, 0.2)' : (esEnCurso ? 'rgba(6, 182, 212, 0.2)' : 'rgba(107, 114, 128, 0.2)')),
+                              color: esCompletada ? '#4ade80' : (esDetenido ? '#f97316' : (esEnCurso ? '#22d3ee' : '#9ca3af')),
+                              boxShadow: esCompletada ? '0 0 10px rgba(34, 197, 94, 0.2)' : ((esEnCurso || esDetenido) ? `0 0 10px ${esDetenido ? 'rgba(249, 115, 22, 0.2)' : 'rgba(6, 182, 212, 0.2)'}` : 'none'),
                             }}
                           >
-                            {esCompletada ? "COMPLETADA" : (esEnCurso ? "EN CURSO" : "PLANIFICADA")}
+                            {esCompletada ? "COMPLETADA" : (esDetenido ? "DETENIDO" : (esEnCurso ? "EN CURSO" : "PLANIFICADA"))}
                           </span>
                         </div>
                       </div>
@@ -796,42 +846,57 @@ export default function Dashboard() {
 
           {activeTab === 'estadisticas' && (
             <div className={styles.rutasContainer} style={{ gridTemplateColumns: "1fr", gap: "2rem" }}>
-              {/* Tarjetas Superiores de KPI */}
+              {/* KPIs */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.5rem" }}>
-                {/* KPI 1: Ahorro con IA */}
                 <div className={styles.card} style={{ position: "relative", overflow: "hidden" }}>
                   <div style={{ position: "absolute", top: 0, right: 0, padding: "1rem", opacity: 0.1 }}>
                     <svg width="60" height="60" fill="#22c55e" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.39-2.1 1.39-1.6 0-2.23-.72-2.32-1.64H8.04c.1 1.7 1.36 2.66 2.86 2.97V19h2.34v-1.67c1.52-.29 2.72-1.16 2.73-2.77-.01-2.2-1.9-2.96-3.66-3.42z" /></svg>
                   </div>
-                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>Ahorro Potencial</h3>
+                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>Consumo Este Mes</h3>
                   <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>
-                    {ahorroPotencial} L
+                    {consumoMesActual > 0 ? `${consumoMesActual} L` : '—'}
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <span style={{ color: "#22c55e", background: "rgba(34, 197, 94, 0.1)", padding: "2px 8px", borderRadius: "12px", fontSize: "0.8rem", fontWeight: "600" }}>+12% vs mes pasado</span>
-                  </div>
+                  {ahorroPotencial > 0 && (
+                    <span style={{ color: "#22c55e", background: "rgba(34, 197, 94, 0.1)", padding: "2px 8px", borderRadius: "12px", fontSize: "0.8rem", fontWeight: "600" }}>
+                      {ahorroPotencial}L bajo predicción
+                    </span>
+                  )}
+                  {consumoMesActual === 0 && <span style={{ color: "#4b5563", fontSize: "0.8rem" }}>Añade datos con el botón +</span>}
                 </div>
 
-                {/* KPI 2: Eficiencia de Flota */}
                 <div className={styles.card}>
-                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>Eficiencia de Flota</h3>
-                  <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>94%</div>
-                  <span style={{ color: "var(--accent)", fontSize: "0.9rem" }}>Operativa óptima</span>
+                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>Media Mensual</h3>
+                  <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>
+                    {consumoMedio > 0 ? `${consumoMedio} L` : '—'}
+                  </div>
+                  <span style={{ color: "var(--accent)", fontSize: "0.9rem" }}>
+                    {mesesConDatos > 0 ? `Basado en ${mesesConDatos} mes${mesesConDatos > 1 ? 'es' : ''}` : 'Sin datos aún'}
+                  </span>
                 </div>
 
-                {/* KPI 3: Huella de Carbono */}
                 <div className={styles.card}>
-                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>Huella de Carbono</h3>
-                  <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>1.2T</div>
-                  <span style={{ color: "#60a5fa", fontSize: "0.9rem" }}>Reducción de CO2</span>
+                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>Predicción {nombresMeses[mesActual]}</h3>
+                  <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>
+                    {prediccionMesActual > 0 ? `${prediccionMesActual} L` : '—'}
+                  </div>
+                  <span style={{ color: "#8884d8", fontSize: "0.9rem" }}>
+                    {prediccionMesActual > 0 ? 'Media móvil 3 meses' : 'Necesita historial previo'}
+                  </span>
                 </div>
               </div>
 
-              {/* Gráfico Principal */}
+              {/* Gráfico Principal — AreaChart original */}
               <div className={styles.card} style={{ minHeight: "450px", display: "flex", flexDirection: "column" }}>
-                <div style={{ marginBottom: "2rem" }}>
-                  <h3 className={styles.cardTitle}>Análisis de Consumo y Predicciones IA</h3>
-                  <p style={{ color: "#64748b", fontSize: "0.9rem" }}>Datos en tiempo real vs. Tendencias históricas</p>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
+                  <div>
+                    <h3 className={styles.cardTitle}>Análisis de Consumo y Predicción</h3>
+                    <p style={{ color: "#64748b", fontSize: "0.9rem" }}>
+                      Datos reales vs. tendencia — {new Date().getFullYear()}
+                      <span style={{ marginLeft: "0.5rem", background: "rgba(59,246,59,0.1)", color: "#3bf63b", padding: "2px 8px", borderRadius: "8px", fontSize: "0.75rem" }}>
+                        Mes actual: {nombresMeses[mesActual]}
+                      </span>
+                    </p>
+                  </div>
                 </div>
 
                 <div style={{ flex: 1, width: "100%", height: "100%", minHeight: "300px" }}>
@@ -856,10 +921,117 @@ export default function Dashboard() {
                       />
                       <Legend verticalAlign="top" height={36} />
                       <Area type="monotone" dataKey="consumo" name="Consumo Real (L)" stroke="#3bf63b" fillOpacity={1} fill="url(#colorConsumo)" strokeWidth={3} />
-                      <Area type="monotone" dataKey="prediccion" name="Predicción IA (L)" stroke="#8884d8" strokeDasharray="5 5" fillOpacity={0.4} fill="url(#colorPrediccion)" strokeWidth={2} />
+                      <Area type="monotone" dataKey="prediccion" name="Predicción (L)" stroke="#8884d8" strokeDasharray="5 5" fillOpacity={0.4} fill="url(#colorPrediccion)" strokeWidth={2} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
+              </div>
+
+              {/* Tabla editable de datos mensuales */}
+              <div className={styles.card}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+                  <div>
+                    <h3 className={styles.cardTitle}>Datos Mensuales</h3>
+                    <p style={{ color: "#64748b", fontSize: "0.85rem" }}>Clickea en un mes para editar el consumo manualmente. Los datos de rutas y repostajes se calculan automáticamente.</p>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "0.75rem" }}>
+                  {datosGrafico.map((d, i) => (
+                    <div
+                      key={d.mes}
+                      onClick={() => { setEditandoMes(i); setInputConsumo(d.consumo > 0 ? String(d.consumo) : ''); }}
+                      style={{
+                        padding: "0.75rem",
+                        background: d.esMesActual ? "rgba(59,246,59,0.08)" : "rgba(255,255,255,0.02)",
+                        border: d.esMesActual ? "1px solid rgba(59,246,59,0.3)" : "1px solid rgba(255,255,255,0.06)",
+                        borderRadius: "10px",
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                        position: "relative",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.3rem" }}>
+                        <span style={{ fontSize: "0.75rem", fontWeight: "700", color: d.esMesActual ? "#3bf63b" : "#94a3b8", textTransform: "uppercase" }}>
+                          {d.mes}
+                        </span>
+                        {d.esManual && <span style={{ fontSize: "0.55rem", background: "rgba(139,92,246,0.2)", color: "#a78bfa", padding: "1px 5px", borderRadius: "4px" }}>manual</span>}
+                        {d.esMesActual && <span style={{ fontSize: "0.55rem", background: "rgba(59,246,59,0.2)", color: "#3bf63b", padding: "1px 5px", borderRadius: "4px" }}>actual</span>}
+                      </div>
+
+                      {editandoMes === i ? (
+                        <form
+                          onSubmit={(e) => { e.preventDefault(); guardarDatoManual(i, parseFloat(inputConsumo) || 0); }}
+                          style={{ marginTop: "0.4rem" }}
+                        >
+                          <div style={{
+                            display: "flex",
+                            alignItems: "center",
+                            background: "rgba(0,0,0,0.5)",
+                            border: "1px solid rgba(59,246,59,0.4)",
+                            borderRadius: "8px",
+                            overflow: "hidden",
+                            boxShadow: "0 0 0 3px rgba(59,246,59,0.08)"
+                          }}>
+                            <input
+                              autoFocus
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              value={inputConsumo}
+                              onChange={(e) => setInputConsumo(e.target.value)}
+                              onBlur={() => { guardarDatoManual(i, parseFloat(inputConsumo) || 0); }}
+                              placeholder="0.0"
+                              style={{
+                                flex: 1,
+                                width: "100%",
+                                minWidth: 0,
+                                padding: "0.45rem 0.5rem",
+                                background: "transparent",
+                                border: "none",
+                                color: "#fff",
+                                fontSize: "1rem",
+                                fontWeight: "700",
+                                outline: "none",
+                                textAlign: "center",
+                              }}
+                            />
+                            <span style={{
+                              padding: "0.45rem 0.6rem",
+                              background: "rgba(59,246,59,0.12)",
+                              color: "#3bf63b",
+                              fontSize: "0.75rem",
+                              fontWeight: "700",
+                              letterSpacing: "0.05em",
+                              borderLeft: "1px solid rgba(59,246,59,0.2)",
+                              whiteSpace: "nowrap",
+                            }}>L</span>
+                          </div>
+                          <p style={{ fontSize: "0.6rem", color: "#4b5563", marginTop: "0.3rem", textAlign: "center" }}>Enter o clic fuera</p>
+                        </form>
+                      ) : (
+                        <div style={{ fontSize: "1.2rem", fontWeight: "800", color: d.consumo > 0 ? "#fff" : "#374151", marginTop: "0.2rem" }}>
+                          {d.consumo > 0 ? `${d.consumo}L` : '—'}
+                        </div>
+                      )}
+
+                      {d.prediccion > 0 && editandoMes !== i && (
+                        <div style={{ fontSize: "0.65rem", color: "#8884d8", marginTop: "0.25rem" }}>
+                          ↗ {d.prediccion}L pred.
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {datosManual.some(v => v > 0) && (
+                  <button
+                    onClick={() => { setDatosManual(new Array(12).fill(0)); localStorage.removeItem('carcare_consumo_manual'); toast.success('Datos manuales eliminados'); }}
+                    style={{ marginTop: "1rem", padding: "0.5rem 1rem", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "8px", color: "#ef4444", cursor: "pointer", fontSize: "0.8rem" }}
+                  >
+                    Limpiar datos manuales
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -879,7 +1051,7 @@ export default function Dashboard() {
                     En Vivo
                   </h3>
                   <div style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--accent)' }}>
-                    {rutas.filter(r => r.estado === 'EN_CURSO').length}
+                    {rutas.filter(r => r.estado === 'EN_CURSO' || r.estado === 'DETENIDO').length}
                   </div>
                   <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>Vehículos en ruta</div>
                 </div>
@@ -889,7 +1061,7 @@ export default function Dashboard() {
               <div>
                 <h3 style={{ marginBottom: '1rem', color: '#fff' }}>Estado de la Flota Activa</h3>
                 <div className={styles.grid}>
-                  {rutas.filter(r => r.estado === 'EN_CURSO').map(r => {
+                  {rutas.filter(r => r.estado === 'EN_CURSO' || r.estado === 'DETENIDO').map(r => {
                     const status = getConnectionStatus(r.ultimaActualizacionGPS, !!(r.latitudActual && r.longitudActual));
 
                     return (
@@ -936,13 +1108,13 @@ export default function Dashboard() {
 
                         <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#6b7280' }}>
                           <span>
-                            {status.status === 'online' ? '🟢 Transmitiendo datos' : (status.status === 'idle' ? '🟠 Conexión inestable' : '🔴 Sin conexión')}
+                            {r.estado === 'DETENIDO' ? '🟠 Vehículo detenido' : (status.status === 'online' ? '🟢 Transmitiendo datos' : (status.status === 'idle' ? '🟠 Conexión inestable' : '🔴 Sin conexión'))}
                           </span>
                         </div>
                       </div>
                     )
                   })}
-                  {rutas.filter(r => r.estado === 'EN_CURSO').length === 0 && (
+                  {rutas.filter(r => r.estado === 'EN_CURSO' || r.estado === 'DETENIDO').length === 0 && (
                     <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '3rem', background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px dashed rgba(255,255,255,0.1)' }}>
                       <p style={{ color: '#6b7280' }}>No hay vehículos activos en este momento.</p>
                       <button onClick={() => setActiveTab('rutas')} style={{ marginTop: '1rem', background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', textDecoration: 'underline' }}>
