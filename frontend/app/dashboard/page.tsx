@@ -27,13 +27,6 @@ interface Vehiculo {
   tipoCombustible: string;
   combustibleActual: number;
   activo: boolean;
-  // Mantenimiento
-  fechaITV?: string;
-  fechaSeguro?: string;
-  fechaRevision?: string;
-  fechaCambioAceite?: string;
-  kmCambioAceite?: number;
-  notasMantenimiento?: string;
 }
 
 interface Ruta {
@@ -81,44 +74,16 @@ const MapTrackingGlobal = dynamic(() => import("@/componentes/MapTrackingGlobal"
   )
 });
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production-54f9.up.railway.app";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production.up.railway.app";
 
 export default function Dashboard() {
   const router = useRouter();
 
-  const [activeTab, setActiveTab] = useState<'flota' | 'nuevo' | 'rutas' | 'estadisticas' | 'tracking' | 'configuracion'>('flota');
+  const [activeTab, setActiveTab] = useState<'flota' | 'nuevo' | 'rutas' | 'estadisticas' | 'tracking'>('flota');
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
   const [rutas, setRutas] = useState<Ruta[]>([]);
   const [repostajes, setRepostajes] = useState<Repostaje[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // ═══ CONFIGURACIÓN DE NOTIFICACIONES ═══
-  interface ConfigNotif {
-    emailNotificaciones: string;
-    alertasActivas: boolean;
-    alertaITV: boolean;
-    alertaSeguro: boolean;
-    alertaRevision: boolean;
-    alertaAceite: boolean;
-    diasAlerta30: number;
-    diasAlerta7: number;
-    diasAlerta1: number;
-    emailConfigured: boolean;
-  }
-  const [configNotif, setConfigNotif] = useState<ConfigNotif>({
-    emailNotificaciones: '',
-    alertasActivas: true,
-    alertaITV: true,
-    alertaSeguro: true,
-    alertaRevision: true,
-    alertaAceite: true,
-    diasAlerta30: 30,
-    diasAlerta7: 7,
-    diasAlerta1: 1,
-    emailConfigured: false,
-  });
-  const [guardandoConfig, setGuardandoConfig] = useState(false);
-  const [enviandoTest, setEnviandoTest] = useState(false);
 
   // Helper to get auth headers
   const getAuthHeaders = useCallback((): Record<string, string> => {
@@ -214,52 +179,6 @@ export default function Dashboard() {
   });
 
   const [editandoMes, setEditandoMes] = useState<number | null>(null);
-
-  // ═══ MANTENIMIENTO ═══
-  const [editandoMantenimientoId, setEditandoMantenimientoId] = useState<string | null>(null);
-  const [mantenimientoForm, setMantenimientoForm] = useState<Partial<Vehiculo>>({});
-
-  const diasHasta = (fecha?: string): number | null => {
-    if (!fecha) return null;
-    const diff = Math.ceil((new Date(fecha).getTime() - Date.now()) / 86400000);
-    return diff;
-  };
-
-  const colorFecha = (dias: number | null) => {
-    if (dias === null) return '#4b5563';
-    if (dias < 0)  return '#ef4444';
-    if (dias <= 7)  return '#ef4444';
-    if (dias <= 30) return '#f97316';
-    return '#22c55e';
-  };
-
-  const labelFecha = (dias: number | null, fecha?: string) => {
-    if (!fecha || dias === null) return '—';
-    if (dias < 0) return `Venció hace ${Math.abs(dias)}d`;
-    if (dias === 0) return '¡Vence HOY!';
-    if (dias === 1) return 'Mañana';
-    if (dias <= 30) return `${dias} días`;
-    return new Date(fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
-  };
-
-  const guardarMantenimiento = async (vehiculoId: string) => {
-    try {
-      const res = await fetch(`${API_URL}/api/vehiculos/${vehiculoId}`, {
-        method: 'PUT',
-        headers: getAuthHeaders() as any,
-        body: JSON.stringify(mantenimientoForm)
-      });
-      if (res.ok) {
-        toast.success('Mantenimiento actualizado');
-        setEditandoMantenimientoId(null);
-        cargarDatos();
-      } else {
-        toast.error('Error al guardar');
-      }
-    } catch {
-      toast.error('Error de conexión');
-    }
-  };
   const [inputConsumo, setInputConsumo] = useState('');
 
   const guardarDatoManual = (mesIndex: number, valor: number) => {
@@ -392,7 +311,6 @@ export default function Dashboard() {
     const userStr = localStorage.getItem("user");
     if (userStr) { // Only load data if user is logged in
       cargarDatos();
-      cargarConfiguracion();
     }
 
     let intervalId: NodeJS.Timeout | null = null;
@@ -556,45 +474,6 @@ export default function Dashboard() {
     return '#ef4444';
   };
 
-  const cargarConfiguracion = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_URL}/api/configuracion`, { headers: getAuthHeaders() });
-      if (res.ok) {
-        const data = await res.json();
-        setConfigNotif(data);
-      }
-    } catch { /* silencioso */ }
-  }, [getAuthHeaders]);
-
-  const guardarConfiguracion = async () => {
-    setGuardandoConfig(true);
-    try {
-      const { emailConfigured, ...body } = configNotif;
-      const res = await fetch(`${API_URL}/api/configuracion`, {
-        method: 'PUT',
-        headers: getAuthHeaders() as any,
-        body: JSON.stringify(body),
-      });
-      if (res.ok) toast.success('Configuración guardada');
-      else toast.error('Error al guardar');
-    } catch { toast.error('Error de conexión'); }
-    finally { setGuardandoConfig(false); }
-  };
-
-  const enviarEmailPrueba = async () => {
-    setEnviandoTest(true);
-    try {
-      const res = await fetch(`${API_URL}/api/configuracion/test-email`, {
-        method: 'POST',
-        headers: getAuthHeaders() as any,
-      });
-      const data = await res.json();
-      if (res.ok) toast.success(data.message || 'Email de prueba enviado');
-      else toast.error(data.error || 'Error al enviar');
-    } catch { toast.error('Error de conexión'); }
-    finally { setEnviandoTest(false); }
-  };
-
   return (
     <BackgroundMeteors>
       <main style={{ height: '100%', width: '100%', overflowY: 'auto', position: 'relative', zIndex: 20, paddingBottom: '100px' }}>
@@ -650,12 +529,6 @@ export default function Dashboard() {
             >
               + Nuevo Vehículo
             </button>
-            <button
-              className={`${styles.navButton} ${activeTab === 'configuracion' ? styles.activeTab : ''}`}
-              onClick={() => { setActiveTab('configuracion'); cargarConfiguracion(); }}
-            >
-              ⚙️ Notificaciones
-            </button>
           </nav>
 
           {activeTab === 'flota' && (
@@ -708,7 +581,7 @@ export default function Dashboard() {
                       }}
                     />
                   </div>
-                  <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ marginTop: '1rem' }}>
                     {(() => {
                       const estaOcupado = rutas.some(r => r.vehiculoId === v.id && r.estado !== 'COMPLETADA');
                       return (
@@ -724,88 +597,7 @@ export default function Dashboard() {
                         </span>
                       );
                     })()}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditandoMantenimientoId(editandoMantenimientoId === v.id ? null : v.id);
-                        setMantenimientoForm({
-                          fechaITV: v.fechaITV, fechaSeguro: v.fechaSeguro,
-                          fechaRevision: v.fechaRevision, fechaCambioAceite: v.fechaCambioAceite,
-                          kmCambioAceite: v.kmCambioAceite, notasMantenimiento: v.notasMantenimiento
-                        });
-                      }}
-                      style={{ background: 'none', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#94a3b8', cursor: 'pointer', fontSize: '0.75rem', padding: '0.3rem 0.7rem' }}
-                    >
-                      🔧 Mantenimiento
-                    </button>
                   </div>
-
-                  {/* Panel de mantenimiento expandible */}
-                  {editandoMantenimientoId === v.id && (
-                    <div
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ marginTop: '1.2rem', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '1.2rem' }}
-                    >
-                      {/* Indicadores visuales actuales */}
-                      {(v.fechaITV || v.fechaSeguro || v.fechaRevision || v.fechaCambioAceite) && (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1rem' }}>
-                          {[
-                            { label: 'ITV', fecha: v.fechaITV },
-                            { label: 'Seguro', fecha: v.fechaSeguro },
-                            { label: 'Revisión', fecha: v.fechaRevision },
-                            { label: 'Aceite', fecha: v.fechaCambioAceite },
-                          ].map(({ label, fecha }) => {
-                            const dias = diasHasta(fecha);
-                            const c = colorFecha(dias);
-                            return fecha ? (
-                              <div key={label} style={{ padding: '0.4rem 0.6rem', background: `${c}12`, border: `1px solid ${c}30`, borderRadius: '8px' }}>
-                                <div style={{ fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase' }}>{label}</div>
-                                <div style={{ fontSize: '0.8rem', fontWeight: '700', color: c }}>{labelFecha(dias, fecha)}</div>
-                              </div>
-                            ) : null;
-                          })}
-                        </div>
-                      )}
-
-                      {/* Formulario de edición */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
-                        {[
-                          { key: 'fechaITV', label: '📋 ITV' },
-                          { key: 'fechaSeguro', label: '🛡️ Seguro' },
-                          { key: 'fechaRevision', label: '🔩 Revisión' },
-                          { key: 'fechaCambioAceite', label: '🛢️ Aceite' },
-                        ].map(({ key, label }) => (
-                          <div key={key}>
-                            <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.2rem' }}>{label}</label>
-                            <input
-                              type="date"
-                              value={(mantenimientoForm as any)[key] || ''}
-                              onChange={(e) => setMantenimientoForm({ ...mantenimientoForm, [key]: e.target.value })}
-                              style={{ width: '100%', padding: '0.4rem 0.5rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px', color: '#fff', fontSize: '0.8rem', boxSizing: 'border-box' }}
-                            />
-                          </div>
-                        ))}
-                      </div>
-
-                      <div style={{ marginTop: '0.6rem' }}>
-                        <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.2rem' }}>📝 Notas</label>
-                        <input
-                          type="text"
-                          placeholder="Notas de mantenimiento..."
-                          value={mantenimientoForm.notasMantenimiento || ''}
-                          onChange={(e) => setMantenimientoForm({ ...mantenimientoForm, notasMantenimiento: e.target.value })}
-                          style={{ width: '100%', padding: '0.4rem 0.6rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px', color: '#fff', fontSize: '0.8rem', boxSizing: 'border-box' }}
-                        />
-                      </div>
-
-                      <button
-                        onClick={() => guardarMantenimiento(v.id)}
-                        style={{ marginTop: '0.8rem', width: '100%', padding: '0.6rem', background: 'linear-gradient(135deg,#22c55e,#3bf63b)', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer' }}
-                      >
-                        Guardar fechas
-                      </button>
-                    </div>
-                  )}
                 </div>
               ))}
               {vehiculos.length === 0 && !loading && <p>No hay vehículos registrados.</p>}
@@ -1240,153 +1032,6 @@ export default function Dashboard() {
                     Limpiar datos manuales
                   </button>
                 )}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'configuracion' && (
-            <div style={{ maxWidth: '680px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-
-              {/* Banner si el email del servidor no está configurado */}
-              {!configNotif.emailConfigured && (
-                <div style={{ padding: '1rem 1.25rem', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: '12px', display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: '1.2rem', flexShrink: 0 }}>⚠️</span>
-                  <div>
-                    <p style={{ color: '#f59e0b', fontWeight: '700', margin: '0 0 0.25rem', fontSize: '0.9rem' }}>Servidor de email no configurado</p>
-                    <p style={{ color: '#94a3b8', margin: 0, fontSize: '0.8rem', lineHeight: '1.5' }}>
-                      Para recibir alertas necesitás añadir <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '4px' }}>GMAIL_USER</code> y <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '4px' }}>GMAIL_APP_PASSWORD</code> como variables de entorno en Railway. Mirá el <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '4px' }}>.env.example</code> del proyecto para más info.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Card principal */}
-              <div className={styles.card} style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                <h2 style={{ color: '#fff', fontSize: '1.1rem', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  📧 Email de notificaciones
-                </h2>
-
-                {/* Email destino */}
-                <div>
-                  <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Dirección de email
-                  </label>
-                  <input
-                    type="email"
-                    className={styles.input}
-                    value={configNotif.emailNotificaciones}
-                    onChange={e => setConfigNotif(p => ({ ...p, emailNotificaciones: e.target.value }))}
-                    placeholder="tu@empresa.com"
-                    style={{ width: '100%', boxSizing: 'border-box' }}
-                  />
-                  <p style={{ color: '#4b5563', fontSize: '0.75rem', margin: '0.4rem 0 0' }}>Las alertas automáticas se enviarán a este email.</p>
-                </div>
-
-                {/* Toggle alertas activas */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.875rem 1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div>
-                    <p style={{ color: '#e2e8f0', fontWeight: '600', margin: 0, fontSize: '0.9rem' }}>Alertas activas</p>
-                    <p style={{ color: '#4b5563', fontSize: '0.75rem', margin: '0.2rem 0 0' }}>Activar o desactivar todas las notificaciones</p>
-                  </div>
-                  <button
-                    onClick={() => setConfigNotif(p => ({ ...p, alertasActivas: !p.alertasActivas }))}
-                    style={{
-                      width: '48px', height: '26px', borderRadius: '13px', border: 'none', cursor: 'pointer', flexShrink: 0,
-                      background: configNotif.alertasActivas ? '#22c55e' : '#374151',
-                      position: 'relative', transition: 'background 0.2s',
-                    }}
-                  >
-                    <span style={{
-                      position: 'absolute', top: '3px', width: '20px', height: '20px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s',
-                      left: configNotif.alertasActivas ? '25px' : '3px',
-                    }} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Tipos de alerta */}
-              <div className={styles.card} style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1rem', opacity: configNotif.alertasActivas ? 1 : 0.4, pointerEvents: configNotif.alertasActivas ? 'auto' : 'none' }}>
-                <h2 style={{ color: '#fff', fontSize: '1.1rem', fontWeight: '700', margin: 0 }}>
-                  🔔 Tipos de alerta
-                </h2>
-                {([
-                  { key: 'alertaITV',      label: 'ITV',               icon: '🔍' },
-                  { key: 'alertaSeguro',   label: 'Seguro',             icon: '🛡️' },
-                  { key: 'alertaRevision', label: 'Revisión General',   icon: '🔧' },
-                  { key: 'alertaAceite',   label: 'Cambio de Aceite',   icon: '🛢️' },
-                ] as const).map(({ key, label, icon }) => (
-                  <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <span style={{ color: '#e2e8f0', fontSize: '0.9rem' }}>{icon} {label}</span>
-                    <button
-                      onClick={() => setConfigNotif(p => ({ ...p, [key]: !p[key] }))}
-                      style={{
-                        width: '48px', height: '26px', borderRadius: '13px', border: 'none', cursor: 'pointer', flexShrink: 0,
-                        background: configNotif[key] ? '#22c55e' : '#374151',
-                        position: 'relative', transition: 'background 0.2s',
-                      }}
-                    >
-                      <span style={{
-                        position: 'absolute', top: '3px', width: '20px', height: '20px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s',
-                        left: configNotif[key] ? '25px' : '3px',
-                      }} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              {/* Umbrales */}
-              <div className={styles.card} style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1rem', opacity: configNotif.alertasActivas ? 1 : 0.4, pointerEvents: configNotif.alertasActivas ? 'auto' : 'none' }}>
-                <h2 style={{ color: '#fff', fontSize: '1.1rem', fontWeight: '700', margin: 0 }}>
-                  📅 Días de anticipación
-                </h2>
-                <p style={{ color: '#4b5563', fontSize: '0.8rem', margin: 0 }}>Se enviará una alerta cuando falten exactamente estos días para una fecha de mantenimiento.</p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-                  {([
-                    { key: 'diasAlerta30', label: 'Alerta 1' },
-                    { key: 'diasAlerta7',  label: 'Alerta 2' },
-                    { key: 'diasAlerta1',  label: 'Alerta 3' },
-                  ] as const).map(({ key, label }) => (
-                    <div key={key}>
-                      <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.75rem', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</label>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <input
-                          type="number"
-                          min={1}
-                          max={365}
-                          className={styles.input}
-                          value={configNotif[key]}
-                          onChange={e => setConfigNotif(p => ({ ...p, [key]: parseInt(e.target.value) || 1 }))}
-                          style={{ width: '100%', boxSizing: 'border-box' }}
-                        />
-                        <span style={{ color: '#4b5563', fontSize: '0.75rem', flexShrink: 0 }}>días</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Acciones */}
-              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                <button
-                  onClick={guardarConfiguracion}
-                  disabled={guardandoConfig}
-                  className={styles.submitButton}
-                  style={{ flex: 1, minWidth: '160px' }}
-                >
-                  {guardandoConfig ? 'Guardando...' : '💾 Guardar configuración'}
-                </button>
-                <button
-                  onClick={enviarEmailPrueba}
-                  disabled={enviandoTest || !configNotif.emailConfigured}
-                  style={{
-                    flex: 1, minWidth: '160px', padding: '0.75rem 1.25rem', borderRadius: '10px', border: '1px solid rgba(59,246,59,0.3)',
-                    background: 'rgba(59,246,59,0.08)', color: configNotif.emailConfigured ? '#3bf63b' : '#4b5563',
-                    cursor: configNotif.emailConfigured && !enviandoTest ? 'pointer' : 'not-allowed', fontWeight: '600', fontSize: '0.9rem', transition: 'all 0.2s',
-                  }}
-                  title={!configNotif.emailConfigured ? 'Configura GMAIL_USER en Railway primero' : ''}
-                >
-                  {enviandoTest ? 'Enviando...' : '📨 Enviar email de prueba'}
-                </button>
               </div>
             </div>
           )}

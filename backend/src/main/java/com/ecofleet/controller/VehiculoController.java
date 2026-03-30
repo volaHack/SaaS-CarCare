@@ -40,27 +40,6 @@ public class VehiculoController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    @PutMapping("/{id}")
-    public ResponseEntity<Vehiculo> actualizarVehiculo(@PathVariable String id, @RequestBody Vehiculo datos) {
-        return vehiculoRepository.findById(id).map(v -> {
-            if (datos.getMatricula() != null)         v.setMatricula(datos.getMatricula());
-            if (datos.getMarca() != null)             v.setMarca(datos.getMarca());
-            if (datos.getModelo() != null)            v.setModelo(datos.getModelo());
-            if (datos.getKilometraje() != null)       v.setKilometraje(datos.getKilometraje());
-            if (datos.getCombustibleActual() != null) v.setCombustibleActual(datos.getCombustibleActual());
-            if (datos.getTipoCombustible() != null)   v.setTipoCombustible(datos.getTipoCombustible());
-            if (datos.getActivo() != null)            v.setActivo(datos.getActivo());
-            // Mantenimiento
-            v.setFechaITV(datos.getFechaITV());
-            v.setFechaSeguro(datos.getFechaSeguro());
-            v.setFechaRevision(datos.getFechaRevision());
-            v.setFechaCambioAceite(datos.getFechaCambioAceite());
-            v.setKmCambioAceite(datos.getKmCambioAceite());
-            v.setNotasMantenimiento(datos.getNotasMantenimiento());
-            return ResponseEntity.ok(vehiculoRepository.save(v));
-        }).orElse(ResponseEntity.notFound().build());
-    }
-
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminarVehiculo(@PathVariable String id) {
         if (vehiculoRepository.existsById(id)) {
