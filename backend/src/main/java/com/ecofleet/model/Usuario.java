@@ -36,4 +36,15 @@ public class Usuario {
 
     // Google OAuth - stores Google sub (unique user ID)
     private String googleId;
+
+    // ═══ CONFIGURACIÓN DE NOTIFICACIONES ═══
+    private String emailNotificaciones;       // Email donde recibir alertas (puede diferir del email de login)
+    private boolean alertasActivas = true;    // Activar/desactivar todas las alertas
+    private boolean alertaITV = true;
+    private boolean alertaSeguro = true;
+    private boolean alertaRevision = true;
+    private boolean alertaAceite = true;
+    private int diasAlerta30 = 30;            // Umbrales configurables
+    private int diasAlerta7 = 7;
+    private int diasAlerta1 = 1;
 }
