@@ -27,6 +27,13 @@ interface Vehiculo {
   tipoCombustible: string;
   combustibleActual: number;
   activo: boolean;
+  // Mantenimiento
+  fechaITV?: string;
+  fechaSeguro?: string;
+  fechaRevision?: string;
+  fechaCambioAceite?: string;
+  kmCambioAceite?: number;
+  notasMantenimiento?: string;
 }
 
 interface Ruta {
@@ -179,6 +186,52 @@ export default function Dashboard() {
   });
 
   const [editandoMes, setEditandoMes] = useState<number | null>(null);
+
+  // ═══ MANTENIMIENTO ═══
+  const [editandoMantenimientoId, setEditandoMantenimientoId] = useState<string | null>(null);
+  const [mantenimientoForm, setMantenimientoForm] = useState<Partial<Vehiculo>>({});
+
+  const diasHasta = (fecha?: string): number | null => {
+    if (!fecha) return null;
+    const diff = Math.ceil((new Date(fecha).getTime() - Date.now()) / 86400000);
+    return diff;
+  };
+
+  const colorFecha = (dias: number | null) => {
+    if (dias === null) return '#4b5563';
+    if (dias < 0)  return '#ef4444';
+    if (dias <= 7)  return '#ef4444';
+    if (dias <= 30) return '#f97316';
+    return '#22c55e';
+  };
+
+  const labelFecha = (dias: number | null, fecha?: string) => {
+    if (!fecha || dias === null) return '—';
+    if (dias < 0) return `Venció hace ${Math.abs(dias)}d`;
+    if (dias === 0) return '¡Vence HOY!';
+    if (dias === 1) return 'Mañana';
+    if (dias <= 30) return `${dias} días`;
+    return new Date(fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  const guardarMantenimiento = async (vehiculoId: string) => {
+    try {
+      const res = await fetch(`${API_URL}/api/vehiculos/${vehiculoId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders() as any,
+        body: JSON.stringify(mantenimientoForm)
+      });
+      if (res.ok) {
+        toast.success('Mantenimiento actualizado');
+        setEditandoMantenimientoId(null);
+        cargarDatos();
+      } else {
+        toast.error('Error al guardar');
+      }
+    } catch {
+      toast.error('Error de conexión');
+    }
+  };
   const [inputConsumo, setInputConsumo] = useState('');
 
   const guardarDatoManual = (mesIndex: number, valor: number) => {
@@ -581,7 +634,7 @@ export default function Dashboard() {
                       }}
                     />
                   </div>
-                  <div style={{ marginTop: '1rem' }}>
+                  <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     {(() => {
                       const estaOcupado = rutas.some(r => r.vehiculoId === v.id && r.estado !== 'COMPLETADA');
                       return (
@@ -597,7 +650,88 @@ export default function Dashboard() {
                         </span>
                       );
                     })()}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditandoMantenimientoId(editandoMantenimientoId === v.id ? null : v.id);
+                        setMantenimientoForm({
+                          fechaITV: v.fechaITV, fechaSeguro: v.fechaSeguro,
+                          fechaRevision: v.fechaRevision, fechaCambioAceite: v.fechaCambioAceite,
+                          kmCambioAceite: v.kmCambioAceite, notasMantenimiento: v.notasMantenimiento
+                        });
+                      }}
+                      style={{ background: 'none', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#94a3b8', cursor: 'pointer', fontSize: '0.75rem', padding: '0.3rem 0.7rem' }}
+                    >
+                      🔧 Mantenimiento
+                    </button>
                   </div>
+
+                  {/* Panel de mantenimiento expandible */}
+                  {editandoMantenimientoId === v.id && (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ marginTop: '1.2rem', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '1.2rem' }}
+                    >
+                      {/* Indicadores visuales actuales */}
+                      {(v.fechaITV || v.fechaSeguro || v.fechaRevision || v.fechaCambioAceite) && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1rem' }}>
+                          {[
+                            { label: 'ITV', fecha: v.fechaITV },
+                            { label: 'Seguro', fecha: v.fechaSeguro },
+                            { label: 'Revisión', fecha: v.fechaRevision },
+                            { label: 'Aceite', fecha: v.fechaCambioAceite },
+                          ].map(({ label, fecha }) => {
+                            const dias = diasHasta(fecha);
+                            const c = colorFecha(dias);
+                            return fecha ? (
+                              <div key={label} style={{ padding: '0.4rem 0.6rem', background: `${c}12`, border: `1px solid ${c}30`, borderRadius: '8px' }}>
+                                <div style={{ fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase' }}>{label}</div>
+                                <div style={{ fontSize: '0.8rem', fontWeight: '700', color: c }}>{labelFecha(dias, fecha)}</div>
+                              </div>
+                            ) : null;
+                          })}
+                        </div>
+                      )}
+
+                      {/* Formulario de edición */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+                        {[
+                          { key: 'fechaITV', label: '📋 ITV' },
+                          { key: 'fechaSeguro', label: '🛡️ Seguro' },
+                          { key: 'fechaRevision', label: '🔩 Revisión' },
+                          { key: 'fechaCambioAceite', label: '🛢️ Aceite' },
+                        ].map(({ key, label }) => (
+                          <div key={key}>
+                            <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.2rem' }}>{label}</label>
+                            <input
+                              type="date"
+                              value={(mantenimientoForm as any)[key] || ''}
+                              onChange={(e) => setMantenimientoForm({ ...mantenimientoForm, [key]: e.target.value })}
+                              style={{ width: '100%', padding: '0.4rem 0.5rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px', color: '#fff', fontSize: '0.8rem', boxSizing: 'border-box' }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ marginTop: '0.6rem' }}>
+                        <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.2rem' }}>📝 Notas</label>
+                        <input
+                          type="text"
+                          placeholder="Notas de mantenimiento..."
+                          value={mantenimientoForm.notasMantenimiento || ''}
+                          onChange={(e) => setMantenimientoForm({ ...mantenimientoForm, notasMantenimiento: e.target.value })}
+                          style={{ width: '100%', padding: '0.4rem 0.6rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px', color: '#fff', fontSize: '0.8rem', boxSizing: 'border-box' }}
+                        />
+                      </div>
+
+                      <button
+                        onClick={() => guardarMantenimiento(v.id)}
+                        style={{ marginTop: '0.8rem', width: '100%', padding: '0.6rem', background: 'linear-gradient(135deg,#22c55e,#3bf63b)', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer' }}
+                      >
+                        Guardar fechas
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
               {vehiculos.length === 0 && !loading && <p>No hay vehículos registrados.</p>}

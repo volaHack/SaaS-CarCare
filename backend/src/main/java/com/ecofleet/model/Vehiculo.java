@@ -20,5 +20,14 @@ public class Vehiculo {
     private String tipoCombustible;
     
     
-    private Boolean activo; 
+    private Boolean activo;
+
+    // ═══ MANTENIMIENTO ═══
+    // Fechas en formato "YYYY-MM-DD"
+    private String fechaITV;           // Próxima ITV obligatoria
+    private String fechaSeguro;        // Vencimiento del seguro
+    private String fechaRevision;      // Próxima revisión general
+    private String fechaCambioAceite;  // Próximo cambio de aceite (por fecha)
+    private Double kmCambioAceite;     // Próximo cambio de aceite (por km)
+    private String notasMantenimiento;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import BackgroundMeteors from "@/componentes/BackgroundMeteors";
@@ -128,6 +128,7 @@ export default function ConductorDashboard() {
 
     // GPS Fallback para navegador
     const [gpsInterval, setGpsInterval] = useState<NodeJS.Timeout | null>(null);
+    const gpsWatchIdRef = useRef<number | null>(null);
 
     const startBrowserGPS = (rutaId: string) => {
         if (!navigator.geolocation) {
@@ -190,9 +191,9 @@ export default function ConductorDashboard() {
                     }
                 );
 
-                // Guardar el watchId para poder limpiarlo después
+                // Guardar el watchId en una ref para poder limpiarlo después
+                gpsWatchIdRef.current = watchId;
                 const interval = setInterval(() => { }, 1000);
-                (interval as any).watchId = watchId;
                 setGpsInterval(interval);
             },
             (error) => {
@@ -214,11 +215,11 @@ export default function ConductorDashboard() {
     };
 
     const stopBrowserGPS = () => {
+        if (gpsWatchIdRef.current !== null) {
+            navigator.geolocation.clearWatch(gpsWatchIdRef.current);
+            gpsWatchIdRef.current = null;
+        }
         if (gpsInterval) {
-            // Limpiar el watchPosition si existe
-            if ((gpsInterval as any).watchId) {
-                navigator.geolocation.clearWatch((gpsInterval as any).watchId);
-            }
             clearInterval(gpsInterval);
             setGpsInterval(null);
         }
