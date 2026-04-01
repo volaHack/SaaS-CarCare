@@ -115,6 +115,11 @@ public class ReporteService {
 
         double costeTotal = costeCombustible + costeMantenimiento;
 
+        // Email destino: emailNotificaciones si está configurado, sino el de la cuenta
+        String emailDestino = (admin.getEmailNotificaciones() != null && !admin.getEmailNotificaciones().isBlank())
+                ? admin.getEmailNotificaciones()
+                : admin.getEmail();
+
         // ── Construir y enviar email ───────────────────────────────────────────
         String html = buildHtml(
                 admin.getNombreEmpresa() != null ? admin.getNombreEmpresa() : admin.getNombre(),
@@ -129,7 +134,7 @@ public class ReporteService {
 
         MimeMessage msg = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(msg, true, "UTF-8");
-        helper.setTo(admin.getEmail());
+        helper.setTo(emailDestino);
         helper.setSubject(String.format("📊 Reporte Mensual CarCare — %s %d", mesNombre, year));
         helper.setText(html, true);
         mailSender.send(msg);

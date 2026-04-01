@@ -7,6 +7,7 @@ import styles from "./page.module.css";
 import BackgroundMeteors from "@/componentes/BackgroundMeteors";
 import LocationInput from "@/componentes/LocationInput";
 import AlertasPanel from "@/componentes/AlertasPanel";
+import ConfiguracionPanel from "@/componentes/ConfiguracionPanel";
 import dynamic from "next/dynamic";
 import {
   XAxis,
@@ -487,6 +488,7 @@ export default function Dashboard() {
                   else if (vehiculoId) { router.push(`/vehiculo/${vehiculoId}`); }
                 }}
               />
+              <ConfiguracionPanel apiUrl={API_URL} getAuthHeaders={getAuthHeaders} />
               <button
                 onClick={handleLogout}
                 className={styles.submitButton}

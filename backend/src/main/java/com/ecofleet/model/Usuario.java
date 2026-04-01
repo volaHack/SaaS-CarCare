@@ -36,4 +36,7 @@ public class Usuario {
 
     // Google OAuth - stores Google sub (unique user ID)
     private String googleId;
+
+    // Email destino para reportes y notificaciones (si null, se usa email de cuenta)
+    private String emailNotificaciones;
 }
