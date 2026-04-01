@@ -12,9 +12,6 @@ public class ConfiguracionEmail {
 
     private String empresaId;
 
-    // Resend API key (https://resend.com)
-    private String resendApiKey;
-
-    // Destination email for reports (overrides account email)
+    // Email where reports are sent (if null, uses account email)
     private String emailNotificaciones;
 }

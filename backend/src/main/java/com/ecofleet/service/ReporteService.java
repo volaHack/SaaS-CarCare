@@ -47,9 +47,6 @@ public class ReporteService {
                 .orElseThrow(() -> new IllegalArgumentException("Empresa no encontrada"));
 
         ConfiguracionEmail cfg = configEmailRepo.findByEmpresaId(empresaId).orElse(null);
-        if (cfg == null || cfg.getResendApiKey() == null || cfg.getResendApiKey().isBlank()) {
-            throw new IllegalStateException("Email no configurado. Configurá la API Key de Resend desde Ajustes en el dashboard.");
-        }
 
         LocalDate hoy = LocalDate.now();
         LocalDate mesRef = hoy.getDayOfMonth() == 1 ? hoy.minusMonths(1) : hoy;
@@ -105,7 +102,7 @@ public class ReporteService {
 
         double costeTotal = costeCombustible + costeMantenimiento;
 
-        String emailDestino = (cfg.getEmailNotificaciones() != null && !cfg.getEmailNotificaciones().isBlank())
+        String emailDestino = (cfg != null && cfg.getEmailNotificaciones() != null && !cfg.getEmailNotificaciones().isBlank())
                 ? cfg.getEmailNotificaciones()
                 : admin.getEmail();
 
@@ -121,7 +118,7 @@ public class ReporteService {
         );
 
         String subject = "Reporte Mensual CarCare - " + mesNombre + " " + year;
-        emailService.enviar(cfg.getResendApiKey(), emailDestino, subject, html);
+        emailService.enviar(emailDestino, subject, html);
         log.info("Reporte mensual enviado a {} ({})", emailDestino, empresaId);
     }
 

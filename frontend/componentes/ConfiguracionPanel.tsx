@@ -11,9 +11,8 @@ interface Props {
 export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
   const [open, setOpen] = useState(false);
   const [emailCuenta, setEmailCuenta] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [apiKeyConfigurada, setApiKeyConfigurada] = useState(false);
   const [emailNotif, setEmailNotif] = useState("");
+  const [emailOriginal, setEmailOriginal] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [testeando, setTesteando] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
@@ -22,14 +21,13 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
   useEffect(() => {
     if (!open) return;
     setMsg(null);
-    setApiKey("");
     fetch(`${apiUrl}/api/configuracion`, { headers: getAuthHeaders() })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!data) return;
         setEmailCuenta(data.emailCuenta ?? "");
-        setApiKeyConfigurada(data.apiKeyConfigurada ?? false);
         setEmailNotif(data.emailNotificaciones ?? "");
+        setEmailOriginal(data.emailNotificaciones ?? "");
       })
       .catch(() => {});
   }, [open, apiUrl, getAuthHeaders]);
@@ -40,26 +38,24 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
     return () => document.removeEventListener("keydown", handler);
   }, []);
 
+  const emailActivo = emailNotif || emailCuenta;
+  const hayCambios = emailNotif !== emailOriginal;
+
   const guardar = async () => {
     setGuardando(true);
     setMsg(null);
     try {
-      const body: Record<string, string> = { emailNotificaciones: emailNotif };
-      if (apiKey) body.resendApiKey = apiKey;
-
       const res = await fetch(`${apiUrl}/api/configuracion/email`, {
         method: "PUT",
         headers: getAuthHeaders(),
-        body: JSON.stringify(body),
+        body: JSON.stringify({ emailNotificaciones: emailNotif }),
       });
       if (res.ok) {
-        if (apiKey) setApiKeyConfigurada(true);
-        setApiKey("");
-        setMsg({ tipo: "ok", texto: "Configuracion guardada" });
+        setEmailOriginal(emailNotif);
+        setMsg({ tipo: "ok", texto: "Guardado correctamente" });
         setTimeout(() => setMsg(null), 4000);
       } else {
-        const data = await res.json().catch(() => ({}));
-        setMsg({ tipo: "error", texto: data.error || "Error al guardar" });
+        setMsg({ tipo: "error", texto: "Error al guardar" });
       }
     } catch {
       setMsg({ tipo: "error", texto: "Error de conexion" });
@@ -80,7 +76,7 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
       if (res.ok) {
         setMsg({ tipo: "ok", texto: data.mensaje || "Email de prueba enviado" });
       } else {
-        setMsg({ tipo: "error", texto: data.error || "Error al enviar test" });
+        setMsg({ tipo: "error", texto: data.error || "No se pudo enviar el email" });
       }
     } catch {
       setMsg({ tipo: "error", texto: "Error de conexion" });
@@ -94,7 +90,7 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
       <button
         className={`${styles.btn} ${open ? styles.btnActive : ""}`}
         onClick={() => setOpen(v => !v)}
-        title="Configuracion"
+        title="Ajustes"
       >
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="3"/>
@@ -107,70 +103,40 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
       {open && (
         <div className={styles.panel}>
           <div className={styles.header}>
-            <span className={styles.title}>Configuracion</span>
+            <span className={styles.title}>Ajustes de Notificaciones</span>
             <button className={styles.closeBtn} onClick={() => setOpen(false)}>x</button>
           </div>
 
           <div className={styles.body}>
+            {/* Email de la cuenta */}
             <div className={styles.infoRow}>
-              <span className={styles.label}>Email de cuenta</span>
+              <span className={styles.label}>Tu email de cuenta</span>
               <span className={styles.value}>{emailCuenta || "..."}</span>
             </div>
 
             <div className={styles.divider} />
 
-            {/* ── Resend API Key ──────────────────────────────── */}
+            {/* Email destino */}
             <div className={styles.section}>
-              <label className={styles.sectionTitle}>API Key de Resend</label>
+              <label className={styles.sectionTitle}>Recibir reportes en otro email</label>
               <p className={styles.sectionDesc}>
-                Necesario para enviar reportes por email. Resend es gratis (100 emails/mes).
+                Por defecto los reportes llegan a tu email de cuenta.
+                Si queres que lleguen a otro correo, escribilo aca.
               </p>
 
-              <input
-                className={styles.input}
-                type="password"
-                placeholder={apiKeyConfigurada ? "re_•••••••••  (ya configurada)" : "re_xxxxxxxxxx..."}
-                value={apiKey}
-                onChange={e => setApiKey(e.target.value)}
-              />
-
-              {apiKeyConfigurada ? (
-                <div className={styles.currentEmail}>
-                  <span className={styles.dot} />
-                  API Key configurada
-                </div>
-              ) : (
-                <div className={styles.currentEmail} style={{ color: "rgba(239,68,68,0.7)" }}>
-                  <span className={styles.dot} style={{ background: "#ef4444", boxShadow: "0 0 6px #ef4444" }} />
-                  No configurada — los reportes no se pueden enviar
-                </div>
-              )}
-
-              <div className={styles.helpBox}>
-                <strong>Como obtener la API Key (2 minutos):</strong>
-                <ol>
-                  <li>Entra a <em>resend.com</em> y crea una cuenta gratis</li>
-                  <li>En el dashboard, ve a <em>API Keys</em></li>
-                  <li>Crea una nueva key y copiala aqui</li>
-                </ol>
-              </div>
-            </div>
-
-            <div className={styles.divider} />
-
-            {/* ── Email destino ─────────────────────────────────── */}
-            <div className={styles.section}>
-              <label className={styles.sectionTitle}>Email destino (donde llegan los reportes)</label>
-              <p className={styles.sectionDesc}>
-                Si lo dejas vacio, los reportes se envian al email de tu cuenta.
-              </p>
               <input
                 className={styles.input}
                 type="email"
                 placeholder={emailCuenta || "otro@email.com"}
                 value={emailNotif}
                 onChange={e => setEmailNotif(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && hayCambios) guardar(); }}
               />
+
+              <div className={styles.currentEmail}>
+                <span className={styles.dot} />
+                Los reportes llegan a: <strong>{emailActivo}</strong>
+              </div>
             </div>
 
             {msg && (
@@ -180,18 +146,25 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
             )}
 
             <div className={styles.actions}>
+              {emailNotif && (
+                <button
+                  className={styles.btnSecondary}
+                  onClick={() => { setEmailNotif(""); }}
+                >
+                  Usar email de cuenta
+                </button>
+              )}
               <button
                 className={styles.btnSecondary}
                 onClick={testEmail}
-                disabled={testeando || !apiKeyConfigurada}
-                title={!apiKeyConfigurada ? "Primero guarda la API Key" : ""}
+                disabled={testeando}
               >
                 {testeando ? "Enviando..." : "Enviar test"}
               </button>
               <button
                 className={styles.btnPrimary}
                 onClick={guardar}
-                disabled={guardando}
+                disabled={guardando || !hayCambios}
               >
                 {guardando ? "Guardando..." : "Guardar"}
               </button>

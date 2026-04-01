@@ -28,10 +28,9 @@ public class ConfiguracionController {
                     Map<String, Object> resp = new HashMap<>();
                     resp.put("emailCuenta", u.getEmail());
                     resp.put("nombreEmpresa", u.getNombreEmpresa() != null ? u.getNombreEmpresa() : u.getNombre());
+                    resp.put("emailDisponible", emailService.isConfigured());
 
                     ConfiguracionEmail cfg = configEmailRepo.findByEmpresaId(empresaId).orElse(null);
-                    boolean apiKeyConfigurada = cfg != null && cfg.getResendApiKey() != null && !cfg.getResendApiKey().isBlank();
-                    resp.put("apiKeyConfigurada", apiKeyConfigurada);
                     resp.put("emailNotificaciones", cfg != null && cfg.getEmailNotificaciones() != null ? cfg.getEmailNotificaciones() : "");
                     return ResponseEntity.ok(resp);
                 })
@@ -51,10 +50,6 @@ public class ConfiguracionController {
                     return c;
                 });
 
-        if (body.containsKey("resendApiKey")) {
-            String val = body.get("resendApiKey").trim();
-            cfg.setResendApiKey(val.isEmpty() ? null : val);
-        }
         if (body.containsKey("emailNotificaciones")) {
             String val = body.get("emailNotificaciones").trim();
             cfg.setEmailNotificaciones(val.isEmpty() ? null : val);
@@ -67,19 +62,19 @@ public class ConfiguracionController {
     @PostMapping("/test-email")
     public ResponseEntity<Map<String, String>> testEmail(HttpServletRequest request) {
         String empresaId = (String) request.getAttribute("userId");
-        ConfiguracionEmail cfg = configEmailRepo.findByEmpresaId(empresaId).orElse(null);
 
-        if (cfg == null || cfg.getResendApiKey() == null || cfg.getResendApiKey().isBlank()) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("error", "Primero configura la API Key de Resend"));
+        if (!emailService.isConfigured()) {
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "El servicio de email no esta disponible en este momento"));
         }
 
-        String destino = cfg.getEmailNotificaciones() != null && !cfg.getEmailNotificaciones().isBlank()
+        ConfiguracionEmail cfg = configEmailRepo.findByEmpresaId(empresaId).orElse(null);
+        String destino = cfg != null && cfg.getEmailNotificaciones() != null && !cfg.getEmailNotificaciones().isBlank()
                 ? cfg.getEmailNotificaciones()
                 : usuarioRepository.findById(empresaId).map(u -> u.getEmail()).orElse("");
 
         if (destino.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "No hay email destino configurado"));
+            return ResponseEntity.badRequest().body(Map.of("error", "No hay email destino"));
         }
 
         try {
@@ -87,11 +82,11 @@ public class ConfiguracionController {
                     "<h2 style='color:#22c55e;'>Conexion exitosa</h2>" +
                     "<p>Tu configuracion de email en CarCare funciona correctamente.</p>" +
                     "<p style='color:#6b7280;font-size:0.85rem;'>Los reportes mensuales se enviaran a esta direccion.</p></div>";
-            emailService.enviar(cfg.getResendApiKey(), destino, "CarCare - Test de conexion de email", html);
+            emailService.enviar(destino, "CarCare - Test de email", html);
             return ResponseEntity.ok(Map.of("mensaje", "Email de prueba enviado a " + destino));
         } catch (Exception e) {
             return ResponseEntity.internalServerError()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", "No se pudo enviar el email. Intenta de nuevo mas tarde."));
         }
     }
 }

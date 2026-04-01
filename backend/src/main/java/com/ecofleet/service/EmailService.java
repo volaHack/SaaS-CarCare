@@ -2,6 +2,7 @@ package com.ecofleet.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -19,8 +20,18 @@ public class EmailService {
             .connectTimeout(Duration.ofSeconds(15))
             .build();
 
-    public void enviar(String apiKey, String to, String subject, String html) throws Exception {
-        // Escapar comillas y newlines en el HTML para JSON
+    @Value("${RESEND_API_KEY:}")
+    private String apiKey;
+
+    public boolean isConfigured() {
+        return apiKey != null && !apiKey.isBlank();
+    }
+
+    public void enviar(String to, String subject, String html) throws Exception {
+        if (!isConfigured()) {
+            throw new RuntimeException("Servicio de email no disponible. Contacta al administrador del sistema.");
+        }
+
         String htmlEscaped = html
                 .replace("\\", "\\\\")
                 .replace("\"", "\\\"")
@@ -47,16 +58,8 @@ public class EmailService {
         if (response.statusCode() >= 200 && response.statusCode() < 300) {
             log.info("Email enviado exitosamente a {}", to);
         } else {
-            String body = response.body();
-            log.error("Error Resend ({}): {}", response.statusCode(), body);
-
-            if (response.statusCode() == 401 || response.statusCode() == 403) {
-                throw new RuntimeException("API Key de Resend inválida. Verificá que sea correcta.");
-            } else if (response.statusCode() == 422 && body.contains("not verified")) {
-                throw new RuntimeException("Dominio no verificado en Resend. Usá el plan gratuito con el remitente por defecto.");
-            } else {
-                throw new RuntimeException("Error al enviar email: " + body);
-            }
+            log.error("Error enviando email ({}): {}", response.statusCode(), response.body());
+            throw new RuntimeException("No se pudo enviar el email. Intenta de nuevo mas tarde.");
         }
     }
 }
