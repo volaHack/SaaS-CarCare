@@ -2,6 +2,7 @@ package com.ecofleet.controller;
 
 import com.ecofleet.model.Mensaje;
 import com.ecofleet.repository.MensajeRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,7 +22,8 @@ public class MensajeController {
     }
 
     @PostMapping
-    public Mensaje enviarMensaje(@RequestBody Mensaje mensaje, @RequestHeader(value = "X-User-Id", required = false) String usuarioId) {
+    public Mensaje enviarMensaje(@RequestBody Mensaje mensaje, HttpServletRequest request) {
+        String usuarioId = (String) request.getAttribute("userId");
         if (usuarioId != null) {
             mensaje.setUsuarioId(usuarioId);
         }

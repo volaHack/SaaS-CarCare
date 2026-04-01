@@ -4,6 +4,7 @@ import com.ecofleet.model.Usuario;
 import com.ecofleet.model.Conductor;
 import com.ecofleet.repository.UsuarioRepository;
 import com.ecofleet.repository.ConductorRepository;
+import com.ecofleet.security.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -44,6 +45,9 @@ public class AuthController {
 
     @Autowired
     private ConductorRepository conductorRepository;
+
+    @Autowired
+    private JwtUtil jwtUtil;
 
     private BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -111,6 +115,7 @@ public class AuthController {
             response.put("nombreEmpresa", usuario.getNombreEmpresa());
             response.put("role", "ADMIN");
             response.put("empresaId", null);
+            response.put("token", jwtUtil.generateToken(usuario.getId(), "ADMIN"));
 
             return ResponseEntity.ok(response);
         } else {
@@ -296,6 +301,7 @@ public class AuthController {
             response.put("nombreEmpresa", usuario.getNombreEmpresa());
             response.put("role", "ADMIN");
             response.put("empresaId", null);
+            response.put("token", jwtUtil.generateToken(usuario.getId(), "ADMIN"));
 
             return ResponseEntity.ok(response);
 
@@ -406,6 +412,8 @@ public class AuthController {
             response.put("nombreEmpresa", conductor.getNombreEmpresa());
             response.put("role", "CONDUCTOR");
             response.put("empresaId", conductor.getEmpresaId());
+            // Token subject = empresaId para que el filtro multi-tenant funcione igual que antes
+            response.put("token", jwtUtil.generateToken(conductor.getEmpresaId(), "CONDUCTOR"));
 
             return ResponseEntity.ok(response);
 
@@ -472,6 +480,7 @@ public class AuthController {
             response.put("nombreEmpresa", conductor.getNombreEmpresa());
             response.put("role", "CONDUCTOR");
             response.put("empresaId", conductor.getEmpresaId());
+            response.put("token", jwtUtil.generateToken(conductor.getEmpresaId(), "CONDUCTOR"));
 
             return ResponseEntity.ok(response);
         } else {

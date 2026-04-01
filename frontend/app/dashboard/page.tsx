@@ -90,17 +90,8 @@ export default function Dashboard() {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (typeof window === 'undefined') return headers;
 
-    const userStr = localStorage.getItem("user");
-    if (!userStr) return headers;
-
-    try {
-      const user = JSON.parse(userStr);
-      if (user && user.id) {
-        headers['X-User-Id'] = String(user.id);
-      }
-    } catch (e) {
-      console.error("Error parsing user from localStorage", e);
-    }
+    const token = localStorage.getItem("token");
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     return headers;
   }, []);
 
@@ -119,6 +110,7 @@ export default function Dashboard() {
       if (userStr) {
         const user = JSON.parse(userStr);
         localStorage.removeItem("user");
+        localStorage.removeItem("token");
         toast.info("Sesión cerrada");
         if (user.role === 'CONDUCTOR') {
           router.push("/conductor/login");
@@ -127,6 +119,7 @@ export default function Dashboard() {
       }
     } catch (e) {
       localStorage.removeItem("user");
+      localStorage.removeItem("token");
     }
 
     router.push("/login");

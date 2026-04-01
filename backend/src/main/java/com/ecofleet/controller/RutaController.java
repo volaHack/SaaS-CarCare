@@ -2,6 +2,7 @@ package com.ecofleet.controller;
 
 import com.ecofleet.model.Ruta;
 import com.ecofleet.repository.RutaRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,18 +18,15 @@ public class RutaController {
     private RutaRepository rutaRepository;
 
     @GetMapping
-    public List<Ruta> listarRutas(@RequestHeader(value = "X-User-Id", required = false) String usuarioId) {
-        if (usuarioId != null) {
-            return rutaRepository.findByUsuarioId(usuarioId);
-        }
-        return rutaRepository.findAll();
+    public List<Ruta> listarRutas(HttpServletRequest request) {
+        String usuarioId = (String) request.getAttribute("userId");
+        return rutaRepository.findByUsuarioId(usuarioId);
     }
 
     @PostMapping
-    public Ruta crearRuta(@RequestBody Ruta ruta, @RequestHeader(value = "X-User-Id", required = false) String usuarioId) {
-        if (usuarioId != null) {
-            ruta.setUsuarioId(usuarioId);
-        }
+    public Ruta crearRuta(@RequestBody Ruta ruta, HttpServletRequest request) {
+        String usuarioId = (String) request.getAttribute("userId");
+        ruta.setUsuarioId(usuarioId);
         if (ruta.getEstado() == null) {
             ruta.setEstado("PLANIFICADA");
         }

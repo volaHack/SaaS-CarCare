@@ -90,17 +90,8 @@ export default function RutaTracking() {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (typeof window === 'undefined') return headers;
 
-        const userStr = localStorage.getItem("user");
-        if (!userStr) return headers;
-
-        try {
-            const user = JSON.parse(userStr);
-            if (user && user.id) {
-                headers['X-User-Id'] = String(user.id);
-            }
-        } catch (e) {
-            console.error("Error parsing user from localStorage", e);
-        }
+        const token = localStorage.getItem("token");
+        if (token) headers['Authorization'] = `Bearer ${token}`;
         return headers;
     }, []);
 

@@ -35,21 +35,8 @@ export default function ConductorDashboard() {
         const headers: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
         if (typeof window === 'undefined') return headers;
 
-        const userStr = localStorage.getItem("user");
-        if (!userStr) return headers;
-
-        try {
-            const user = JSON.parse(userStr);
-            // CRITICAL: If I am a driver, I must act on behalf of my company (empresaId)
-            // If I am an admin (testing), I use my own ID.
-            const tenantId = user.role === 'CONDUCTOR' ? user.empresaId : user.id;
-
-            if (tenantId) {
-                headers['X-User-Id'] = String(tenantId);
-            }
-        } catch (e) {
-            console.error("Error parsing user from localStorage", e);
-        }
+        const token = localStorage.getItem("token");
+        if (token) headers['Authorization'] = `Bearer ${token}`;
         return headers;
     };
 

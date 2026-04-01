@@ -92,6 +92,7 @@ function DriverLoginInner() {
 
             if (res.ok) {
                 localStorage.setItem("user", JSON.stringify(data));
+                if (data.token) localStorage.setItem("token", data.token);
                 toast.success(`¡Bienvenido, ${data.nombre}!`);
                 window.dispatchEvent(new Event("storage"));
                 router.push("/conductor");
@@ -134,6 +135,7 @@ function DriverLoginInner() {
             const data = await res.json();
             if (res.ok) {
                 localStorage.setItem("user", JSON.stringify(data));
+                if (data.token) localStorage.setItem("token", data.token);
                 toast.success(`¡Bienvenido, ${data.nombre}!`);
                 window.dispatchEvent(new Event("storage"));
                 router.push("/conductor");

@@ -28,3 +28,6 @@ Thumbs.db
 .env
 .env.local
 .env.production
+
+# Railway env vars reference (contains real values)
+RAILWAY_ENV.md

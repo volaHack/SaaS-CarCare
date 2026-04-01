@@ -2,6 +2,7 @@ package com.ecofleet.controller;
 
 import com.ecofleet.model.Vehiculo;
 import com.ecofleet.repository.VehiculoRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,19 +18,15 @@ public class VehiculoController {
     private VehiculoRepository vehiculoRepository;
 
     @GetMapping
-    public List<Vehiculo> obtenerTodos(@RequestHeader(value = "X-User-Id", required = false) String usuarioId) {
-        if (usuarioId != null) {
-            return vehiculoRepository.findByUsuarioId(usuarioId);
-        }
-        return vehiculoRepository.findAll();
+    public List<Vehiculo> obtenerTodos(HttpServletRequest request) {
+        String usuarioId = (String) request.getAttribute("userId");
+        return vehiculoRepository.findByUsuarioId(usuarioId);
     }
 
     @PostMapping
-    public Vehiculo crearVehiculo(@RequestBody Vehiculo vehiculo, 
-                                 @RequestHeader(value = "X-User-Id", required = false) String usuarioId) {
-        if (usuarioId != null) {
-            vehiculo.setUsuarioId(usuarioId);
-        }
+    public Vehiculo crearVehiculo(@RequestBody Vehiculo vehiculo, HttpServletRequest request) {
+        String usuarioId = (String) request.getAttribute("userId");
+        vehiculo.setUsuarioId(usuarioId);
         return vehiculoRepository.save(vehiculo);
     }
 

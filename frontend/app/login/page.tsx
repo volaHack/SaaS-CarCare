@@ -89,6 +89,7 @@ export default function LoginPage() {
             const data = await res.json();
             if (res.ok) {
                 localStorage.setItem("user", JSON.stringify(data));
+                if (data.token) localStorage.setItem("token", data.token);
                 toast.success("¡Bienvenido!");
                 window.dispatchEvent(new Event("storage"));
                 router.push("/dashboard");
@@ -118,6 +119,7 @@ export default function LoginPage() {
 
             if (res.ok) {
                 localStorage.setItem("user", JSON.stringify(data));
+                if (data.token) localStorage.setItem("token", data.token);
                 toast.success("¡Bienvenido de nuevo!");
                 window.dispatchEvent(new Event("storage"));
                 router.push("/dashboard");

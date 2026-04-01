@@ -68,6 +68,14 @@ export default function VehiculoDetalle() {
     proximoMantenimiento: 0,
   });
 
+  const getAuthHeaders = (): Record<string, string> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (typeof window === 'undefined') return headers;
+    const token = localStorage.getItem("token");
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return headers;
+  };
+
   useEffect(() => {
     cargarDatos();
   }, [id]);
@@ -76,8 +84,8 @@ export default function VehiculoDetalle() {
     setLoading(true);
     try {
       const [resVehiculo, resMantenimientos] = await Promise.all([
-        fetch(`${API_URL}/api/vehiculos/${id}`),
-        fetch(`${API_URL}/api/mantenimientos/vehiculo/${id}`),
+        fetch(`${API_URL}/api/vehiculos/${id}`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/mantenimientos/vehiculo/${id}`, { headers: getAuthHeaders() }),
       ]);
 
       if (resVehiculo.ok) {
@@ -105,7 +113,7 @@ export default function VehiculoDetalle() {
     try {
       const res = await fetch(`${API_URL}${endpoint}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ ...nuevoMantenimiento, vehiculoId: id }),
       });
       if (res.ok) {
