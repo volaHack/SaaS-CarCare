@@ -21,6 +21,12 @@ public class JwtFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
 
+        // Preflight CORS — el browser manda OPTIONS sin token, dejar pasar siempre
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            chain.doFilter(request, response);
+            return;
+        }
+
         String path = request.getRequestURI();
 
         // Endpoints públicos — no requieren token
