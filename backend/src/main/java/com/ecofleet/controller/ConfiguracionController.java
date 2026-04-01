@@ -79,15 +79,16 @@ public class ConfiguracionController {
         try {
             org.springframework.mail.javamail.JavaMailSenderImpl sender = new org.springframework.mail.javamail.JavaMailSenderImpl();
             sender.setHost("smtp.gmail.com");
-            sender.setPort(587);
+            sender.setPort(465);
             sender.setUsername(cfg.getSmtpEmail());
             sender.setPassword(cfg.getSmtpPassword());
             java.util.Properties props = sender.getJavaMailProperties();
             props.put("mail.smtp.auth", "true");
-            props.put("mail.smtp.starttls.enable", "true");
-            props.put("mail.smtp.starttls.required", "true");
-            props.put("mail.smtp.connectiontimeout", "5000");
-            props.put("mail.smtp.timeout", "5000");
+            props.put("mail.smtp.ssl.enable", "true");
+            props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
+            props.put("mail.smtp.socketFactory.port", "465");
+            props.put("mail.smtp.connectiontimeout", "10000");
+            props.put("mail.smtp.timeout", "10000");
 
             String destino = cfg.getEmailNotificaciones() != null && !cfg.getEmailNotificaciones().isBlank()
                     ? cfg.getEmailNotificaciones()

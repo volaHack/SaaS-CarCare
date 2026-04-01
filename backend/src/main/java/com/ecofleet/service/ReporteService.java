@@ -151,13 +151,14 @@ public class ReporteService {
     private JavaMailSenderImpl crearMailSender(String email, String password) {
         JavaMailSenderImpl sender = new JavaMailSenderImpl();
         sender.setHost("smtp.gmail.com");
-        sender.setPort(587);
+        sender.setPort(465);
         sender.setUsername(email);
         sender.setPassword(password);
         Properties props = sender.getJavaMailProperties();
         props.put("mail.smtp.auth", "true");
-        props.put("mail.smtp.starttls.enable", "true");
-        props.put("mail.smtp.starttls.required", "true");
+        props.put("mail.smtp.ssl.enable", "true");
+        props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
+        props.put("mail.smtp.socketFactory.port", "465");
         return sender;
     }
 
