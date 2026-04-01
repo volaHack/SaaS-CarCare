@@ -17,7 +17,11 @@ import {
   Legend,
   ResponsiveContainer,
   AreaChart,
-  Area
+  Area,
+  LineChart,
+  Line,
+  BarChart,
+  Bar
 } from "recharts";
 
 interface Vehiculo {
@@ -66,6 +70,40 @@ interface Conductor {
   email: string;
 }
 
+interface VehiculoKpi {
+  vehiculoId: string;
+  vehiculo: string;
+  matricula: string;
+  activo: boolean;
+  costeTotalSemestre: number;
+  costeCombustible: number;
+  costeMantenimiento: number;
+  costePorKm: number;
+  litrosPor100Km: number;
+  kmTotales: number;
+  litrosTotales: number;
+}
+
+interface TendenciaMes {
+  mes: string;
+  periodo: string;
+  costeCombustible: number;
+  costeMantenimiento: number;
+  costeTotal: number;
+  kmRecorridos: number;
+  litros: number;
+  costePorKm: number;
+}
+
+interface FlotaKpis {
+  totalVehiculos: number;
+  costeTotalFlota: number;
+  kmTotalesFlota: number;
+  costePorKmFlota: number;
+  vehiculos: VehiculoKpi[];
+  tendenciaMensual: TendenciaMes[];
+}
+
 // Dynamic import para el mapa de tracking global (evitar SSR)
 const MapTrackingGlobal = dynamic(() => import("@/componentes/MapTrackingGlobal"), {
   ssr: false,
@@ -89,11 +127,13 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-product
 export default function Dashboard() {
   const router = useRouter();
 
-  const [activeTab, setActiveTab] = useState<'flota' | 'nuevo' | 'rutas' | 'estadisticas' | 'tracking'>('flota');
+  const [activeTab, setActiveTab] = useState<'flota' | 'nuevo' | 'rutas' | 'estadisticas' | 'tracking' | 'costes'>('flota');
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
   const [rutas, setRutas] = useState<Ruta[]>([]);
   const [conductores, setConductores] = useState<Conductor[]>([]);
   const [repostajes, setRepostajes] = useState<Repostaje[]>([]);
+  const [flotaKpis, setFlotaKpis] = useState<FlotaKpis | null>(null);
+  const [loadingKpis, setLoadingKpis] = useState(false);
   const [loading, setLoading] = useState(true);
   const [enviandoReporte, setEnviandoReporte] = useState(false);
 
@@ -543,6 +583,22 @@ export default function Dashboard() {
               onClick={() => setActiveTab('rutas')}
             >
               Rutas y Logística
+            </button>
+            <button
+              className={`${styles.navButton} ${activeTab === 'costes' ? styles.activeTab : ''}`}
+              onClick={() => {
+                setActiveTab('costes');
+                if (!flotaKpis && !loadingKpis) {
+                  setLoadingKpis(true);
+                  fetch(`${API_URL}/api/reportes/flota/kpis`, { headers: getAuthHeaders() })
+                    .then(res => res.ok ? res.json() : Promise.reject('Error'))
+                    .then(data => setFlotaKpis(data))
+                    .catch(() => toast.error('Error cargando KPIs de costes'))
+                    .finally(() => setLoadingKpis(false));
+                }
+              }}
+            >
+              Costes & ROI
             </button>
             <button
               className={`${styles.navButton} ${activeTab === 'estadisticas' ? styles.activeTab : ''}`}
@@ -1137,6 +1193,266 @@ export default function Dashboard() {
                 {enviandoReporte ? "Enviando..." : "Enviar Reporte"}
               </button>
               </div>
+            </div>
+          )}
+
+          {/* ═══════════════════ TAB: COSTES & ROI ═══════════════════ */}
+          {activeTab === 'costes' && (
+            <div className={styles.rutasContainer} style={{ gridTemplateColumns: '1fr', gap: '2rem' }}>
+              {loadingKpis && (
+                <div style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>
+                  <div style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>Calculando costes de la flota...</div>
+                  <div style={{ width: '40px', height: '40px', border: '3px solid rgba(59,246,59,0.2)', borderTop: '3px solid #3bf63b', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto' }} />
+                </div>
+              )}
+
+              {flotaKpis && !loadingKpis && (
+                <>
+                  {/* ── KPI Cards globales ── */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+                    <div className={styles.card} style={{ position: 'relative', overflow: 'hidden' }}>
+                      <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '80px', height: '80px', background: 'radial-gradient(circle, rgba(168,85,247,0.15) 0%, transparent 70%)' }} />
+                      <h3 style={{ color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.5rem' }}>Coste Total Flota</h3>
+                      <div style={{ fontSize: '2.2rem', fontWeight: '800', color: '#fff', letterSpacing: '-1px' }}>
+                        €{flotaKpis.costeTotalFlota.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                      </div>
+                      <span style={{ color: '#a78bfa', fontSize: '0.8rem' }}>Últimos 6 meses</span>
+                    </div>
+
+                    <div className={styles.card} style={{ position: 'relative', overflow: 'hidden' }}>
+                      <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '80px', height: '80px', background: 'radial-gradient(circle, rgba(34,197,94,0.15) 0%, transparent 70%)' }} />
+                      <h3 style={{ color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.5rem' }}>Coste/Km Flota</h3>
+                      <div style={{ fontSize: '2.2rem', fontWeight: '800', color: '#fff', letterSpacing: '-1px' }}>
+                        €{flotaKpis.costePorKmFlota.toFixed(2)}
+                      </div>
+                      <span style={{ color: '#22c55e', fontSize: '0.8rem' }}>Media por kilómetro</span>
+                    </div>
+
+                    <div className={styles.card} style={{ position: 'relative', overflow: 'hidden' }}>
+                      <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '80px', height: '80px', background: 'radial-gradient(circle, rgba(59,130,246,0.15) 0%, transparent 70%)' }} />
+                      <h3 style={{ color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.5rem' }}>Km Totales</h3>
+                      <div style={{ fontSize: '2.2rem', fontWeight: '800', color: '#fff', letterSpacing: '-1px' }}>
+                        {flotaKpis.kmTotalesFlota.toLocaleString('es-ES', { maximumFractionDigits: 0 })}
+                      </div>
+                      <span style={{ color: '#60a5fa', fontSize: '0.8rem' }}>{flotaKpis.totalVehiculos} vehículos</span>
+                    </div>
+
+                    <div className={styles.card} style={{ position: 'relative', overflow: 'hidden' }}>
+                      <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '80px', height: '80px', background: 'radial-gradient(circle, rgba(245,158,11,0.15) 0%, transparent 70%)' }} />
+                      <h3 style={{ color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.5rem' }}>Vehículo + Costoso</h3>
+                      <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#fff', letterSpacing: '-0.5px' }}>
+                        {flotaKpis.vehiculos[0]?.vehiculo || '—'}
+                      </div>
+                      <span style={{ color: '#f59e0b', fontSize: '0.8rem' }}>
+                        {flotaKpis.vehiculos[0] ? `€${flotaKpis.vehiculos[0].costePorKm.toFixed(2)}/km` : '—'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* ── Gráfico de Tendencia Mensual ── */}
+                  <div className={styles.card} style={{ minHeight: '420px', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ marginBottom: '1.5rem' }}>
+                      <h3 className={styles.cardTitle}>Tendencia de Costes — Últimos 6 Meses</h3>
+                      <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                        Evolución del coste de combustible y mantenimiento de toda la flota
+                      </p>
+                    </div>
+                    <div style={{ flex: 1, width: '100%', minHeight: '300px' }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={flotaKpis.tendenciaMensual}>
+                          <defs>
+                            <linearGradient id="colorCosteComb" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.6} />
+                              <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                            </linearGradient>
+                            <linearGradient id="colorCosteMant" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#ef4444" stopOpacity={0.6} />
+                              <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" opacity={0.08} />
+                          <XAxis dataKey="mes" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                          <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val: number) => `€${val}`} />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}
+                            itemStyle={{ color: '#e2e8f0' }}
+                            formatter={(value, name) => [`€${Number(value ?? 0).toFixed(2)}`, name ?? '']}
+                          />
+                          <Legend verticalAlign="top" height={36} />
+                          <Area type="monotone" dataKey="costeCombustible" name="Combustible" stroke="#f59e0b" fillOpacity={1} fill="url(#colorCosteComb)" strokeWidth={2.5} />
+                          <Area type="monotone" dataKey="costeMantenimiento" name="Mantenimiento" stroke="#ef4444" fillOpacity={1} fill="url(#colorCosteMant)" strokeWidth={2.5} />
+                          <Line type="monotone" dataKey="costeTotal" name="Coste Total" stroke="#a78bfa" strokeWidth={2} dot={{ fill: '#a78bfa', r: 4 }} strokeDasharray="5 5" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* ── Cards por Vehículo ── */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                      <div>
+                        <h3 style={{ color: '#fff', fontSize: '1.15rem', fontWeight: '700' }}>Ranking de Costes por Vehículo</h3>
+                        <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '0.15rem' }}>Ordenado por coste total en los últimos 6 meses</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setLoadingKpis(true);
+                          fetch(`${API_URL}/api/reportes/flota/kpis`, { headers: getAuthHeaders() })
+                            .then(res => res.ok ? res.json() : Promise.reject('Error'))
+                            .then(data => { setFlotaKpis(data); toast.success('Costes actualizados'); })
+                            .catch(() => toast.error('Error recargando costes'))
+                            .finally(() => setLoadingKpis(false));
+                        }}
+                        className={styles.submitButton}
+                        style={{ width: 'auto', padding: '0.5rem 1.2rem', fontSize: '0.85rem' }}
+                      >
+                        🔄 Actualizar
+                      </button>
+                    </div>
+
+                    <div className={styles.grid}>
+                      {flotaKpis.vehiculos.map((v, idx) => {
+                        const rankColors = ['#f59e0b', '#94a3b8', '#cd7f32'];
+                        const rankBorder = idx < 3 ? rankColors[idx] : 'rgba(255,255,255,0.08)';
+                        const isTop = idx === 0;
+
+                        return (
+                          <div
+                            key={v.vehiculoId}
+                            className={styles.card}
+                            style={{
+                              borderLeft: `4px solid ${rankBorder}`,
+                              position: 'relative',
+                              cursor: 'pointer',
+                            }}
+                            onClick={() => router.push(`/vehiculo/${v.vehiculoId}`)}
+                          >
+                            {/* Rank badge */}
+                            <div style={{
+                              position: 'absolute',
+                              top: '12px',
+                              right: '12px',
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '8px',
+                              background: idx < 3 ? `${rankBorder}20` : 'rgba(255,255,255,0.04)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '0.75rem',
+                              fontWeight: '800',
+                              color: idx < 3 ? rankBorder : '#4b5563',
+                            }}>
+                              #{idx + 1}
+                            </div>
+
+                            <div className={styles.cardHeader} style={{ marginBottom: '1rem' }}>
+                              <div>
+                                <h2 className={styles.cardTitle} style={{ fontSize: '1.1rem' }}>{v.vehiculo}</h2>
+                                <span className={styles.cardSubtitle}>{v.matricula}</span>
+                              </div>
+                            </div>
+
+                            {/* Coste Total destacado */}
+                            <div style={{
+                              background: isTop ? 'rgba(245,158,11,0.08)' : 'rgba(255,255,255,0.02)',
+                              border: isTop ? '1px solid rgba(245,158,11,0.2)' : '1px solid rgba(255,255,255,0.05)',
+                              borderRadius: '12px',
+                              padding: '1rem',
+                              marginBottom: '1rem',
+                              textAlign: 'center',
+                            }}>
+                              <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.3rem' }}>Coste Total 6M</div>
+                              <div style={{ fontSize: '1.8rem', fontWeight: '800', color: isTop ? '#f59e0b' : '#fff', letterSpacing: '-1px' }}>
+                                €{v.costeTotalSemestre.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                              </div>
+                            </div>
+
+                            <div className={styles.statRow}>
+                              <span className={styles.statLabel}>Coste/Km</span>
+                              <span className={styles.statValue} style={{
+                                color: v.costePorKm > (flotaKpis?.costePorKmFlota || 0) ? '#ef4444' : '#22c55e',
+                                fontWeight: '700'
+                              }}>
+                                €{v.costePorKm.toFixed(2)}/km
+                                {v.costePorKm > (flotaKpis?.costePorKmFlota || 0)
+                                  ? <span style={{ marginLeft: '0.4rem', fontSize: '0.7rem', background: 'rgba(239,68,68,0.1)', padding: '2px 6px', borderRadius: '6px' }}>↑ sobre media</span>
+                                  : <span style={{ marginLeft: '0.4rem', fontSize: '0.7rem', background: 'rgba(34,197,94,0.1)', padding: '2px 6px', borderRadius: '6px' }}>✓ eficiente</span>
+                                }
+                              </span>
+                            </div>
+
+                            <div className={styles.statRow}>
+                              <span className={styles.statLabel}>L/100km</span>
+                              <span className={styles.statValue}>{v.litrosPor100Km.toFixed(1)}</span>
+                            </div>
+
+                            <div className={styles.statRow}>
+                              <span className={styles.statLabel}>Combustible</span>
+                              <span className={styles.statValue} style={{ color: '#f59e0b' }}>€{v.costeCombustible.toFixed(2)}</span>
+                            </div>
+
+                            <div className={styles.statRow}>
+                              <span className={styles.statLabel}>Mantenimiento</span>
+                              <span className={styles.statValue} style={{ color: '#ef4444' }}>€{v.costeMantenimiento.toFixed(2)}</span>
+                            </div>
+
+                            <div className={styles.statRow} style={{ borderBottom: 'none' }}>
+                              <span className={styles.statLabel}>Km Recorridos</span>
+                              <span className={styles.statValue}>{v.kmTotales.toLocaleString('es-ES')} km</span>
+                            </div>
+
+                            {/* Mini bar visualizing cost split */}
+                            <div style={{ marginTop: '0.75rem' }}>
+                              <div style={{ display: 'flex', gap: '2px', height: '6px', borderRadius: '3px', overflow: 'hidden' }}>
+                                <div style={{
+                                  width: v.costeTotalSemestre > 0 ? `${(v.costeCombustible / v.costeTotalSemestre) * 100}%` : '50%',
+                                  background: 'linear-gradient(90deg, #f59e0b, #fbbf24)',
+                                  borderRadius: '3px 0 0 3px',
+                                }} />
+                                <div style={{
+                                  width: v.costeTotalSemestre > 0 ? `${(v.costeMantenimiento / v.costeTotalSemestre) * 100}%` : '50%',
+                                  background: 'linear-gradient(90deg, #ef4444, #f87171)',
+                                  borderRadius: '0 3px 3px 0',
+                                }} />
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.3rem' }}>
+                                <span style={{ fontSize: '0.65rem', color: '#f59e0b' }}>Combustible</span>
+                                <span style={{ fontSize: '0.65rem', color: '#ef4444' }}>Mantenimiento</span>
+                              </div>
+                            </div>
+
+                            {/* Status badge */}
+                            <div style={{ marginTop: '0.75rem' }}>
+                              <span
+                                className={styles.badge}
+                                style={{
+                                  backgroundColor: v.activo ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                  color: v.activo ? '#4ade80' : '#f87171',
+                                }}
+                              >
+                                {v.activo ? 'ACTIVO' : 'TALLER'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {flotaKpis.vehiculos.length === 0 && (
+                        <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '3rem', background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px dashed rgba(255,255,255,0.1)' }}>
+                          <p style={{ color: '#6b7280' }}>No hay datos de costes disponibles. Registra repostajes y mantenimientos para ver el análisis.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {!flotaKpis && !loadingKpis && (
+                <div style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>
+                  <p>Haz click en el tab para cargar los KPIs de costes de tu flota.</p>
+                </div>
+              )}
             </div>
           )}
 

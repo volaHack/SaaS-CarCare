@@ -17,8 +17,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.time.format.DateTimeParseException;
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -34,6 +33,10 @@ public class ReporteService {
     @Autowired private MantenimientoCorrectivoRepository correctivosRepo;
     @Autowired private ConfiguracionEmailRepository configEmailRepo;
     @Autowired private EmailService emailService;
+
+    // ════════════════════════════════════════════════════════════════════════════
+    // REPORTE MENSUAL POR EMAIL (existente)
+    // ════════════════════════════════════════════════════════════════════════════
 
     @Scheduled(cron = "0 0 8 1 * *")
     public void enviarReportesMensuales() {
@@ -135,7 +138,227 @@ public class ReporteService {
                 emailDestino, empresaId, year, month, totalVehiculos, rutasTotal, rutasCompletadas);
     }
 
-    // ─── Template HTML — dark theme acorde al dashboard CarCare ──────────────
+    // ════════════════════════════════════════════════════════════════════════════
+    // COSTES & ROI POR VEHÍCULO (Feature 2)
+    // ════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Calcula el TCO de un vehículo específico para un periodo dado.
+     * Si no se pasa periodo, usa los últimos 6 meses.
+     */
+    public Map<String, Object> calcularCostesVehiculo(String empresaId, String vehiculoId, String periodoStr) {
+        Vehiculo vehiculo = vehiculoRepository.findById(vehiculoId)
+                .orElseThrow(() -> new IllegalArgumentException("Vehículo no encontrado"));
+
+        // Verificar que el vehículo pertenece a la empresa
+        if (!empresaId.equals(vehiculo.getUsuarioId())) {
+            throw new IllegalArgumentException("Vehículo no pertenece a esta empresa");
+        }
+
+        YearMonth periodo = periodoStr != null && !periodoStr.isBlank()
+                ? YearMonth.parse(periodoStr)
+                : YearMonth.now();
+
+        // Calcular costes para los últimos 6 meses hasta el periodo dado
+        List<Map<String, Object>> tendenciaMensual = new ArrayList<>();
+        double totalCombustible = 0, totalMantenimiento = 0, totalLitros = 0, totalKm = 0;
+
+        for (int i = 5; i >= 0; i--) {
+            YearMonth mes = periodo.minusMonths(i);
+            Map<String, Object> datosMes = calcularCostesMesVehiculo(vehiculoId, mes);
+            tendenciaMensual.add(datosMes);
+
+            totalCombustible += (double) datosMes.get("costeCombustible");
+            totalMantenimiento += (double) datosMes.get("costeMantenimiento");
+            totalLitros += (double) datosMes.get("litros");
+            totalKm += (double) datosMes.get("kmRecorridos");
+        }
+
+        // Estimación de amortización: valor medio vehículo comercial / 120 meses (10 años)
+        double amortizacionMensual = 2500.0; // €30,000 / 120 meses ≈ €250/mes, x6 = €1,500
+        double totalAmortizacion = amortizacionMensual; // 6 meses
+
+        double costeTotal = totalCombustible + totalMantenimiento + totalAmortizacion;
+        double costePorKm = totalKm > 0 ? costeTotal / totalKm : 0;
+        double litrosPor100Km = totalKm > 0 ? (totalLitros / totalKm) * 100 : 0;
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("vehiculoId", vehiculoId);
+        result.put("vehiculo", vehiculo.getMarca() + " " + vehiculo.getModelo());
+        result.put("matricula", vehiculo.getMatricula());
+        result.put("periodo", periodo.toString());
+        result.put("costeTotal", round2(costeTotal));
+        result.put("costeCombustible", round2(totalCombustible));
+        result.put("costeMantenimiento", round2(totalMantenimiento));
+        result.put("amortizacionEstimada", round2(totalAmortizacion));
+        result.put("costePorKm", round2(costePorKm));
+        result.put("litrosPor100Km", round2(litrosPor100Km));
+        result.put("kmTotales", round2(totalKm));
+        result.put("litrosTotales", round2(totalLitros));
+        result.put("tendenciaMensual", tendenciaMensual);
+
+        return result;
+    }
+
+    /**
+     * Calcula KPIs de la flota completa: coste/km por vehículo, tendencia mensual,
+     * ranking de más costosos.
+     */
+    public Map<String, Object> calcularFlotaKpis(String empresaId) {
+        List<Vehiculo> vehiculos = vehiculoRepository.findByUsuarioId(empresaId);
+        YearMonth ahora = YearMonth.now();
+
+        // ── KPIs por vehículo ──
+        List<Map<String, Object>> vehiculosKpis = new ArrayList<>();
+        for (Vehiculo v : vehiculos) {
+            Map<String, Object> kpi = calcularKpiVehiculo(v, ahora);
+            vehiculosKpis.add(kpi);
+        }
+
+        // Ordenar por coste total DESC (ranking de más costosos)
+        vehiculosKpis.sort((a, b) -> Double.compare(
+                (double) b.get("costeTotalSemestre"),
+                (double) a.get("costeTotalSemestre")
+        ));
+
+        // ── Tendencia mensual global (últimos 6 meses) ──
+        List<Map<String, Object>> tendenciaGlobal = new ArrayList<>();
+        for (int i = 5; i >= 0; i--) {
+            YearMonth mes = ahora.minusMonths(i);
+            double costeCombMes = 0, costeMantMes = 0, kmMes = 0, litrosMes = 0;
+
+            for (Vehiculo v : vehiculos) {
+                Map<String, Object> datosMes = calcularCostesMesVehiculo(v.getId(), mes);
+                costeCombMes += (double) datosMes.get("costeCombustible");
+                costeMantMes += (double) datosMes.get("costeMantenimiento");
+                kmMes += (double) datosMes.get("kmRecorridos");
+                litrosMes += (double) datosMes.get("litros");
+            }
+
+            String mesLabel = mes.getMonth().getDisplayName(TextStyle.SHORT, new Locale("es", "ES"));
+            mesLabel = mesLabel.substring(0, 1).toUpperCase() + mesLabel.substring(1);
+
+            Map<String, Object> datoMes = new LinkedHashMap<>();
+            datoMes.put("mes", mesLabel);
+            datoMes.put("periodo", mes.toString());
+            datoMes.put("costeCombustible", round2(costeCombMes));
+            datoMes.put("costeMantenimiento", round2(costeMantMes));
+            datoMes.put("costeTotal", round2(costeCombMes + costeMantMes));
+            datoMes.put("kmRecorridos", round2(kmMes));
+            datoMes.put("litros", round2(litrosMes));
+            datoMes.put("costePorKm", kmMes > 0 ? round2((costeCombMes + costeMantMes) / kmMes) : 0);
+            tendenciaGlobal.add(datoMes);
+        }
+
+        // ── Totales globales ──
+        double totalCosteFlota = vehiculosKpis.stream()
+                .mapToDouble(k -> (double) k.get("costeTotalSemestre")).sum();
+        double totalKmFlota = vehiculosKpis.stream()
+                .mapToDouble(k -> (double) k.get("kmTotales")).sum();
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("totalVehiculos", vehiculos.size());
+        result.put("costeTotalFlota", round2(totalCosteFlota));
+        result.put("kmTotalesFlota", round2(totalKmFlota));
+        result.put("costePorKmFlota", totalKmFlota > 0 ? round2(totalCosteFlota / totalKmFlota) : 0);
+        result.put("vehiculos", vehiculosKpis);
+        result.put("tendenciaMensual", tendenciaGlobal);
+
+        return result;
+    }
+
+    // ── Helpers para Feature 2 ─────────────────────────────────────────────────
+
+    private Map<String, Object> calcularKpiVehiculo(Vehiculo v, YearMonth ahora) {
+        String vehiculoId = v.getId();
+        double totalComb = 0, totalMant = 0, totalLitros = 0, totalKm = 0;
+
+        for (int i = 5; i >= 0; i--) {
+            YearMonth mes = ahora.minusMonths(i);
+            Map<String, Object> datosMes = calcularCostesMesVehiculo(vehiculoId, mes);
+            totalComb += (double) datosMes.get("costeCombustible");
+            totalMant += (double) datosMes.get("costeMantenimiento");
+            totalLitros += (double) datosMes.get("litros");
+            totalKm += (double) datosMes.get("kmRecorridos");
+        }
+
+        double costeTotal = totalComb + totalMant;
+
+        Map<String, Object> kpi = new LinkedHashMap<>();
+        kpi.put("vehiculoId", vehiculoId);
+        kpi.put("vehiculo", v.getMarca() + " " + v.getModelo());
+        kpi.put("matricula", v.getMatricula());
+        kpi.put("activo", Boolean.TRUE.equals(v.getActivo()));
+        kpi.put("costeTotalSemestre", round2(costeTotal));
+        kpi.put("costeCombustible", round2(totalComb));
+        kpi.put("costeMantenimiento", round2(totalMant));
+        kpi.put("costePorKm", totalKm > 0 ? round2(costeTotal / totalKm) : 0);
+        kpi.put("litrosPor100Km", totalKm > 0 ? round2((totalLitros / totalKm) * 100.0) : 0);
+        kpi.put("kmTotales", round2(totalKm));
+        kpi.put("litrosTotales", round2(totalLitros));
+
+        return kpi;
+    }
+
+    private Map<String, Object> calcularCostesMesVehiculo(String vehiculoId, YearMonth mes) {
+        int year = mes.getYear();
+        int month = mes.getMonthValue();
+
+        // Combustible
+        double costeComb = 0, litros = 0;
+        for (Repostaje r : repostajeRepository.findByVehiculoId(vehiculoId)) {
+            if (r.getFecha() != null && r.getFecha().getYear() == year && r.getFecha().getMonthValue() == month) {
+                costeComb += r.getCosteTotal() != null ? r.getCosteTotal() : 0;
+                litros += r.getLitros() != null ? r.getLitros() : 0;
+            }
+        }
+
+        // Mantenimiento
+        double costeMant = 0;
+        for (MantenimientoPreventivo mp : preventivosRepo.findByVehiculoIdOrderByFechaDesc(vehiculoId)) {
+            if (mp.getFecha() != null && mp.getFecha().getYear() == year && mp.getFecha().getMonthValue() == month) {
+                costeMant += mp.getCosto() != null ? mp.getCosto() : 0;
+            }
+        }
+        for (MantenimientoCorrectivo mc : correctivosRepo.findByVehiculoIdOrderByFechaDesc(vehiculoId)) {
+            if (mc.getFecha() != null && mc.getFecha().getYear() == year && mc.getFecha().getMonthValue() == month) {
+                costeMant += mc.getCosto() != null ? mc.getCosto() : 0;
+            }
+        }
+
+        // Km recorridos (rutas completadas del vehículo en ese mes)
+        double kmMes = 0;
+        for (Ruta ruta : rutaRepository.findByVehiculoId(vehiculoId)) {
+            if ("COMPLETADA".equals(normalizarEstado(ruta.getEstado()))
+                    && perteneceAlPeriodo(ruta.getFecha(), mes)) {
+                kmMes += ruta.getDistanciaEstimadaKm() != null ? ruta.getDistanciaEstimadaKm() : 0;
+            }
+        }
+
+        String mesLabel = mes.getMonth().getDisplayName(TextStyle.SHORT, new Locale("es", "ES"));
+        mesLabel = mesLabel.substring(0, 1).toUpperCase() + mesLabel.substring(1);
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("mes", mesLabel);
+        data.put("periodo", mes.toString());
+        data.put("costeCombustible", round2(costeComb));
+        data.put("costeMantenimiento", round2(costeMant));
+        data.put("costeTotal", round2(costeComb + costeMant));
+        data.put("litros", round2(litros));
+        data.put("kmRecorridos", round2(kmMes));
+        data.put("costePorKm", kmMes > 0 ? round2((costeComb + costeMant) / kmMes) : 0);
+
+        return data;
+    }
+
+    private double round2(double value) {
+        return Math.round(value * 100.0) / 100.0;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════
+    // HTML TEMPLATE (existente - sin cambios)
+    // ════════════════════════════════════════════════════════════════════════════
+
     private String buildHtml(String empresa, String mes, int year,
                              long totalVeh, long activosVeh,
                              long rutasTot, long rutasComp,
@@ -155,7 +378,7 @@ public class ReporteService {
                "<table width='100%' cellpadding='0' cellspacing='0' style='background:#080c14;'><tr><td align='center'>" +
                "<table width='600' cellpadding='0' cellspacing='0' style='max-width:600px;width:100%;'>" +
 
-               // ── HEADER ─────────────────────────────────────────────────────
+               // ── HEADER
                "<tr><td style='background:linear-gradient(135deg,#0f1923 0%,#0d1117 100%);padding:48px 40px 36px;text-align:center;border-bottom:2px solid #3bf63b;'>" +
                "<div style='margin-bottom:20px;'>" +
                "<span style='display:inline-block;font-size:28px;font-weight:800;letter-spacing:3px;color:#3bf63b;'>./CarCare</span>" +
@@ -164,7 +387,7 @@ public class ReporteService {
                "<p style='color:rgba(255,255,255,0.45);margin:0;font-size:14px;'>" + mes + " " + year + "</p>" +
                "</td></tr>" +
 
-               // ── EMPRESA BAR ────────────────────────────────────────────────
+               // ── EMPRESA BAR
                "<tr><td style='background:#0f1923;padding:16px 40px;border-bottom:1px solid rgba(255,255,255,0.06);'>" +
                "<table width='100%' cellpadding='0' cellspacing='0'><tr>" +
                "<td style='color:rgba(255,255,255,0.4);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;'>Empresa</td>" +
@@ -172,7 +395,7 @@ public class ReporteService {
                "</tr></table>" +
                "</td></tr>" +
 
-               // ── BODY ───────────────────────────────────────────────────────
+               // ── BODY
                "<tr><td style='background:#0d1117;padding:32px 28px;'>" +
 
                // Intro
@@ -202,7 +425,7 @@ public class ReporteService {
 
                "</td></tr>" +
 
-               // ── FOOTER ─────────────────────────────────────────────────────
+               // ── FOOTER
                "<tr><td style='background:#0a0e18;padding:28px 40px;text-align:center;border-top:1px solid rgba(255,255,255,0.06);'>" +
                "<p style='color:rgba(255,255,255,0.25);font-size:12px;margin:0 0 6px;'>Reporte generado automaticamente por <span style='color:#3bf63b;'>CarCare</span></p>" +
                "<p style='color:rgba(255,255,255,0.15);font-size:11px;margin:0;'>" + year + " CarCare Tracker - Gestion Inteligente de Flotas</p>" +
