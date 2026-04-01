@@ -8,8 +8,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.YearMonth;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
@@ -34,7 +41,7 @@ public class ReporteService {
         List<Usuario> admins = usuarioRepository.findByRole("ADMIN");
         for (Usuario admin : admins) {
             try {
-                enviarReporte(admin.getId());
+                enviarReporte(admin.getId(), LocalDate.now(), true);
             } catch (Exception e) {
                 log.error("Error enviando reporte a {}: {}", admin.getEmail(), e.getMessage());
             }
@@ -43,20 +50,23 @@ public class ReporteService {
     }
 
     public void enviarReporte(String empresaId) throws Exception {
+        enviarReporte(empresaId, LocalDate.now(), false);
+    }
+
+    void enviarReporte(String empresaId, LocalDate fechaBase, boolean cierreMensual) throws Exception {
         Usuario admin = usuarioRepository.findById(empresaId)
                 .orElseThrow(() -> new IllegalArgumentException("Empresa no encontrada"));
 
         ConfiguracionEmail cfg = configEmailRepo.findByEmpresaId(empresaId).orElse(null);
 
-        LocalDate hoy = LocalDate.now();
-        LocalDate mesRef = hoy.getDayOfMonth() == 1 ? hoy.minusMonths(1) : hoy;
-        int year  = mesRef.getYear();
-        int month = mesRef.getMonthValue();
-        String mesNombre = mesRef.getMonth().getDisplayName(TextStyle.FULL, new Locale("es", "ES"));
+        YearMonth periodo = cierreMensual
+                ? YearMonth.from(fechaBase.minusMonths(1))
+                : YearMonth.from(fechaBase);
+        int year  = periodo.getYear();
+        int month = periodo.getMonthValue();
+        String mesNombre = periodo.getMonth().getDisplayName(TextStyle.FULL, new Locale("es", "ES"));
         mesNombre = mesNombre.substring(0, 1).toUpperCase() + mesNombre.substring(1);
-        String yearMonthPrefix = String.format("%d-%02d", year, month);
 
-        // ── Datos ─────────────────────────────────────────────────────────────
         List<Vehiculo> vehiculos = vehiculoRepository.findByUsuarioId(empresaId);
         long totalVehiculos   = vehiculos.size();
         long vehiculosActivos = vehiculos.stream().filter(v -> Boolean.TRUE.equals(v.getActivo())).count();
@@ -65,12 +75,14 @@ public class ReporteService {
 
         List<Ruta> todasRutas = rutaRepository.findByUsuarioId(empresaId);
         List<Ruta> rutasMes   = todasRutas.stream()
-                .filter(r -> r.getFecha() != null && r.getFecha().startsWith(yearMonthPrefix))
+                .filter(r -> perteneceAlPeriodo(r.getFecha(), periodo))
                 .collect(Collectors.toList());
-        long rutasCompletadas = rutasMes.stream().filter(r -> "COMPLETADA".equals(r.getEstado())).count();
+        long rutasCompletadas = rutasMes.stream()
+                .filter(r -> "COMPLETADA".equals(normalizarEstado(r.getEstado())))
+                .count();
         long rutasTotal       = rutasMes.size();
         double kmTotales      = rutasMes.stream()
-                .filter(r -> "COMPLETADA".equals(r.getEstado()) && r.getDistanciaEstimadaKm() != null)
+                .filter(r -> "COMPLETADA".equals(normalizarEstado(r.getEstado())) && r.getDistanciaEstimadaKm() != null)
                 .mapToDouble(Ruta::getDistanciaEstimadaKm).sum();
 
         double litrosTotales = 0, costeCombustible = 0;
@@ -119,7 +131,8 @@ public class ReporteService {
 
         String subject = "Reporte Mensual CarCare - " + mesNombre + " " + year;
         emailService.enviar(emailDestino, subject, html);
-        log.info("Reporte mensual enviado a {} ({})", emailDestino, empresaId);
+        log.info("Reporte mensual enviado a {} ({}) para {}-{}: vehiculos={}, rutasPlanificadas={}, rutasCompletadas={}",
+                emailDestino, empresaId, year, month, totalVehiculos, rutasTotal, rutasCompletadas);
     }
 
     // ─── Template HTML — dark theme acorde al dashboard CarCare ──────────────
@@ -205,5 +218,67 @@ public class ReporteService {
                "<div style='font-size:22px;font-weight:800;color:#ffffff;margin-bottom:4px;letter-spacing:-0.5px;'>" + value + "</div>" +
                "<div style='font-size:12px;color:rgba(255,255,255,0.4);'>" + sub + "</div>" +
                "</div>";
+    }
+
+    private boolean perteneceAlPeriodo(String fechaRuta, YearMonth periodo) {
+        LocalDate fecha = parseRutaFecha(fechaRuta);
+        return fecha != null && YearMonth.from(fecha).equals(periodo);
+    }
+
+    private LocalDate parseRutaFecha(String fechaRuta) {
+        if (fechaRuta == null || fechaRuta.isBlank()) {
+            return null;
+        }
+
+        String valor = fechaRuta.trim();
+
+        LocalDate fecha = parseLocalDate(valor);
+        if (fecha != null) {
+            return fecha;
+        }
+
+        int separadorFechaHora = valor.indexOf('T');
+        if (separadorFechaHora > 0) {
+            fecha = parseLocalDate(valor.substring(0, separadorFechaHora));
+            if (fecha != null) {
+                return fecha;
+            }
+        }
+
+        try {
+            return OffsetDateTime.parse(valor).toLocalDate();
+        } catch (DateTimeParseException ignored) {
+        }
+
+        try {
+            return ZonedDateTime.parse(valor).toLocalDate();
+        } catch (DateTimeParseException ignored) {
+        }
+
+        try {
+            return Instant.parse(valor).atZone(ZoneId.systemDefault()).toLocalDate();
+        } catch (DateTimeParseException ignored) {
+        }
+
+        log.warn("No se pudo interpretar la fecha de la ruta para el reporte mensual: {}", fechaRuta);
+        return null;
+    }
+
+    private LocalDate parseLocalDate(String valor) {
+        try {
+            return LocalDate.parse(valor, DateTimeFormatter.ISO_LOCAL_DATE);
+        } catch (DateTimeParseException ignored) {
+        }
+
+        try {
+            return LocalDate.parse(valor, DateTimeFormatter.ofPattern("yyyy-M-d"));
+        } catch (DateTimeParseException ignored) {
+        }
+
+        return null;
+    }
+
+    private String normalizarEstado(String estado) {
+        return estado == null ? "" : estado.trim().toUpperCase(Locale.ROOT);
     }
 }
