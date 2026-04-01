@@ -122,7 +122,7 @@ public class ReporteService {
         log.info("Reporte mensual enviado a {} ({})", emailDestino, empresaId);
     }
 
-    // ─── Template HTML ────────────────────────────────────────────────────────
+    // ─── Template HTML — dark theme acorde al dashboard CarCare ──────────────
     private String buildHtml(String empresa, String mes, int year,
                              long totalVeh, long activosVeh,
                              long rutasTot, long rutasComp,
@@ -135,48 +135,75 @@ public class ReporteService {
                 : "-";
 
         return "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'>" +
-               "<meta name='viewport' content='width=device-width,initial-scale=1'>" +
-               "<title>Reporte Mensual CarCare</title></head>" +
-               "<body style='margin:0;padding:0;background:#f0f2f5;font-family:Segoe UI,Arial,sans-serif;'>" +
-               "<div style='background:linear-gradient(135deg,#1a1f2e 0%,#0d1117 100%);padding:40px 32px 32px;text-align:center;'>" +
-               "<div style='display:inline-block;background:rgba(255,255,255,0.1);border-radius:12px;padding:10px 20px;margin-bottom:16px;'>" +
-               "<span style='color:#60a5fa;font-size:14px;font-weight:700;letter-spacing:2px;'>CARCARE</span></div>" +
-               "<h1 style='color:#fff;margin:0 0 6px;font-size:26px;font-weight:700;'>Reporte Mensual de Flota</h1>" +
-               "<p style='color:rgba(255,255,255,0.55);margin:0;font-size:15px;'>" + mes + " " + year + " - " + empresa + "</p>" +
+               "<meta name='viewport' content='width=device-width,initial-scale=1'></head>" +
+               "<body style='margin:0;padding:0;background:#080c14;font-family:Segoe UI,Roboto,Arial,sans-serif;'>" +
+
+               // ── Outer container
+               "<table width='100%' cellpadding='0' cellspacing='0' style='background:#080c14;'><tr><td align='center'>" +
+               "<table width='600' cellpadding='0' cellspacing='0' style='max-width:600px;width:100%;'>" +
+
+               // ── HEADER ─────────────────────────────────────────────────────
+               "<tr><td style='background:linear-gradient(135deg,#0f1923 0%,#0d1117 100%);padding:48px 40px 36px;text-align:center;border-bottom:2px solid #3bf63b;'>" +
+               "<div style='margin-bottom:20px;'>" +
+               "<span style='display:inline-block;font-size:28px;font-weight:800;letter-spacing:3px;color:#3bf63b;'>./CarCare</span>" +
                "</div>" +
-               "<div style='max-width:600px;margin:0 auto;padding:32px 16px 48px;'>" +
-               "<p style='color:#374151;font-size:15px;line-height:1.6;margin-bottom:28px;'>" +
-               "Hola, aqui tenes el resumen de actividad de tu flota durante <strong>" + mes + " " + year + "</strong>.</p>" +
-               "<div style='display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;'>" +
-               kpiCard("Vehiculos", totalVeh + " total", activosVeh + " activos", "#3b82f6") +
-               kpiCard("Rutas", rutasTot + " planificadas", rutasComp + " completadas (" + pct + ")", "#10b981") +
-               "</div>" +
-               "<div style='display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;'>" +
-               kpiCard("Kilometros", String.format("%.0f km", km), "rutas completadas", "#8b5cf6") +
-               kpiCard("Combustible", String.format("%.1f L", litros), String.format("%.2f EUR coste", costeComb), "#f59e0b") +
-               "</div>" +
-               "<div style='display:flex;gap:16px;margin-bottom:28px;flex-wrap:wrap;'>" +
-               kpiCard("Mantenimientos", mantenTotal + " registros", String.format("%.2f EUR coste", costeMant), "#ef4444") +
-               kpiCard("Coste Total", String.format("%.2f EUR", costeTotal), "comb. + mantenimiento", "#6366f1") +
-               "</div>" +
-               "<hr style='border:none;border-top:1px solid #e5e7eb;margin:0 0 24px;'/>" +
-               "<p style='color:#6b7280;font-size:13px;text-align:center;line-height:1.6;'>" +
-               "Este reporte fue generado automaticamente por <strong>CarCare</strong>.</p>" +
-               "</div>" +
-               "<div style='background:#1a1f2e;padding:20px;text-align:center;'>" +
-               "<p style='color:rgba(255,255,255,0.3);font-size:12px;margin:0;'>" + year + " CarCare - Gestion Inteligente de Flotas</p>" +
-               "</div>" +
+               "<h1 style='color:#ffffff;margin:0 0 8px;font-size:22px;font-weight:700;letter-spacing:0.5px;'>Reporte Mensual de Flota</h1>" +
+               "<p style='color:rgba(255,255,255,0.45);margin:0;font-size:14px;'>" + mes + " " + year + "</p>" +
+               "</td></tr>" +
+
+               // ── EMPRESA BAR ────────────────────────────────────────────────
+               "<tr><td style='background:#0f1923;padding:16px 40px;border-bottom:1px solid rgba(255,255,255,0.06);'>" +
+               "<table width='100%' cellpadding='0' cellspacing='0'><tr>" +
+               "<td style='color:rgba(255,255,255,0.4);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;'>Empresa</td>" +
+               "<td align='right' style='color:#ffffff;font-size:14px;font-weight:700;'>" + empresa + "</td>" +
+               "</tr></table>" +
+               "</td></tr>" +
+
+               // ── BODY ───────────────────────────────────────────────────────
+               "<tr><td style='background:#0d1117;padding:32px 28px;'>" +
+
+               // Intro
+               "<p style='color:rgba(255,255,255,0.6);font-size:14px;line-height:1.7;margin:0 0 28px;'>" +
+               "Aqui tenes el resumen de actividad de tu flota durante <span style='color:#3bf63b;font-weight:600;'>" + mes + " " + year + "</span>.</p>" +
+
+               // ── KPI Row 1: Vehiculos + Rutas
+               "<table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px;'><tr>" +
+               "<td width='49%' valign='top'>" + kpiCard("VEHICULOS", totalVeh + " total", activosVeh + " activos", "#3bf63b") + "</td>" +
+               "<td width='2%'></td>" +
+               "<td width='49%' valign='top'>" + kpiCard("RUTAS", rutasTot + " planificadas", rutasComp + " completadas (" + pct + ")", "#22c55e") + "</td>" +
+               "</tr></table>" +
+
+               // ── KPI Row 2: Km + Combustible
+               "<table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px;'><tr>" +
+               "<td width='49%' valign='top'>" + kpiCard("KILOMETROS", String.format("%.0f km", km), "recorridos este mes", "#60a5fa") + "</td>" +
+               "<td width='2%'></td>" +
+               "<td width='49%' valign='top'>" + kpiCard("COMBUSTIBLE", String.format("%.1f L", litros), String.format("%.2f EUR", costeComb), "#f59e0b") + "</td>" +
+               "</tr></table>" +
+
+               // ── KPI Row 3: Mantenimientos + Coste Total
+               "<table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:8px;'><tr>" +
+               "<td width='49%' valign='top'>" + kpiCard("MANTENIMIENTOS", mantenTotal + " registros", String.format("%.2f EUR", costeMant), "#ef4444") + "</td>" +
+               "<td width='2%'></td>" +
+               "<td width='49%' valign='top'>" + kpiCard("COSTE TOTAL", String.format("%.2f EUR", costeTotal), "combustible + mant.", "#a78bfa") + "</td>" +
+               "</tr></table>" +
+
+               "</td></tr>" +
+
+               // ── FOOTER ─────────────────────────────────────────────────────
+               "<tr><td style='background:#0a0e18;padding:28px 40px;text-align:center;border-top:1px solid rgba(255,255,255,0.06);'>" +
+               "<p style='color:rgba(255,255,255,0.25);font-size:12px;margin:0 0 6px;'>Reporte generado automaticamente por <span style='color:#3bf63b;'>CarCare</span></p>" +
+               "<p style='color:rgba(255,255,255,0.15);font-size:11px;margin:0;'>" + year + " CarCare Tracker - Gestion Inteligente de Flotas</p>" +
+               "</td></tr>" +
+
+               "</table></td></tr></table>" +
                "</body></html>";
     }
 
-    private String kpiCard(String label, String value, String sub, String color) {
-        return "<div style='flex:1;min-width:220px;background:#fff;border-radius:12px;" +
-               "padding:20px;box-shadow:0 1px 4px rgba(0,0,0,0.07);" +
-               "border-left:4px solid " + color + ";'>" +
-               "<div style='font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;" +
-               "letter-spacing:1px;margin-bottom:4px;'>" + label + "</div>" +
-               "<div style='font-size:20px;font-weight:700;color:#111827;margin-bottom:2px;'>" + value + "</div>" +
-               "<div style='font-size:13px;color:#6b7280;'>" + sub + "</div>" +
+    private String kpiCard(String label, String value, String sub, String accentColor) {
+        return "<div style='background:#0f1923;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:18px 16px;'>" +
+               "<div style='font-size:10px;font-weight:700;color:" + accentColor + ";text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;'>" + label + "</div>" +
+               "<div style='font-size:22px;font-weight:800;color:#ffffff;margin-bottom:4px;letter-spacing:-0.5px;'>" + value + "</div>" +
+               "<div style='font-size:12px;color:rgba(255,255,255,0.4);'>" + sub + "</div>" +
                "</div>";
     }
 }

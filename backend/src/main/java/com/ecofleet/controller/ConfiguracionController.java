@@ -78,10 +78,24 @@ public class ConfiguracionController {
         }
 
         try {
-            String html = "<div style='font-family:sans-serif;padding:2rem;background:#0d1117;color:#fff;border-radius:12px;'>" +
-                    "<h2 style='color:#22c55e;'>Conexion exitosa</h2>" +
-                    "<p>Tu configuracion de email en CarCare funciona correctamente.</p>" +
-                    "<p style='color:#6b7280;font-size:0.85rem;'>Los reportes mensuales se enviaran a esta direccion.</p></div>";
+            String html = "<body style='margin:0;padding:0;background:#080c14;font-family:Segoe UI,Roboto,Arial,sans-serif;'>" +
+                    "<table width='100%' cellpadding='0' cellspacing='0' style='background:#080c14;'><tr><td align='center'>" +
+                    "<table width='500' cellpadding='0' cellspacing='0' style='max-width:500px;width:100%;'>" +
+                    "<tr><td style='background:linear-gradient(135deg,#0f1923,#0d1117);padding:40px;text-align:center;border-bottom:2px solid #3bf63b;'>" +
+                    "<span style='font-size:24px;font-weight:800;color:#3bf63b;letter-spacing:3px;'>./CarCare</span>" +
+                    "</td></tr>" +
+                    "<tr><td style='background:#0d1117;padding:40px;text-align:center;'>" +
+                    "<div style='background:#0f1923;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:32px;margin-bottom:20px;'>" +
+                    "<div style='width:48px;height:48px;margin:0 auto 16px;background:rgba(59,246,59,0.1);border-radius:50%;line-height:48px;text-align:center;'>" +
+                    "<span style='color:#3bf63b;font-size:24px;'>&#10003;</span></div>" +
+                    "<h2 style='color:#ffffff;margin:0 0 8px;font-size:18px;font-weight:700;'>Conexion exitosa</h2>" +
+                    "<p style='color:rgba(255,255,255,0.5);font-size:13px;margin:0;line-height:1.6;'>Tu configuracion de email funciona correctamente.<br>Los reportes mensuales se enviaran a esta direccion.</p>" +
+                    "</div>" +
+                    "</td></tr>" +
+                    "<tr><td style='background:#0a0e18;padding:20px;text-align:center;border-top:1px solid rgba(255,255,255,0.06);'>" +
+                    "<p style='color:rgba(255,255,255,0.2);font-size:11px;margin:0;'>CarCare Tracker - Gestion Inteligente de Flotas</p>" +
+                    "</td></tr>" +
+                    "</table></td></tr></table></body>";
             emailService.enviar(destino, "CarCare - Test de email", html);
             return ResponseEntity.ok(Map.of("mensaje", "Email de prueba enviado a " + destino));
         } catch (Exception e) {
