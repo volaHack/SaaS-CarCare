@@ -11,13 +11,9 @@ interface Props {
 export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
   const [open, setOpen] = useState(false);
   const [emailCuenta, setEmailCuenta] = useState("");
-  // SMTP config
-  const [smtpEmail, setSmtpEmail] = useState("");
-  const [smtpPassword, setSmtpPassword] = useState("");
-  const [smtpConfigurado, setSmtpConfigurado] = useState(false);
-  // Email destino
+  const [apiKey, setApiKey] = useState("");
+  const [apiKeyConfigurada, setApiKeyConfigurada] = useState(false);
   const [emailNotif, setEmailNotif] = useState("");
-  // UI
   const [guardando, setGuardando] = useState(false);
   const [testeando, setTesteando] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
@@ -26,15 +22,14 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
   useEffect(() => {
     if (!open) return;
     setMsg(null);
+    setApiKey("");
     fetch(`${apiUrl}/api/configuracion`, { headers: getAuthHeaders() })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!data) return;
         setEmailCuenta(data.emailCuenta ?? "");
-        setSmtpEmail(data.smtpEmail ?? "");
-        setSmtpConfigurado(data.smtpConfigurado ?? false);
+        setApiKeyConfigurada(data.apiKeyConfigurada ?? false);
         setEmailNotif(data.emailNotificaciones ?? "");
-        setSmtpPassword("");
       })
       .catch(() => {});
   }, [open, apiUrl, getAuthHeaders]);
@@ -50,8 +45,7 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
     setMsg(null);
     try {
       const body: Record<string, string> = { emailNotificaciones: emailNotif };
-      if (smtpEmail) body.smtpEmail = smtpEmail;
-      if (smtpPassword) body.smtpPassword = smtpPassword;
+      if (apiKey) body.resendApiKey = apiKey;
 
       const res = await fetch(`${apiUrl}/api/configuracion/email`, {
         method: "PUT",
@@ -59,8 +53,8 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
         body: JSON.stringify(body),
       });
       if (res.ok) {
-        setSmtpConfigurado(!!smtpEmail);
-        setSmtpPassword("");
+        if (apiKey) setApiKeyConfigurada(true);
+        setApiKey("");
         setMsg({ tipo: "ok", texto: "Configuracion guardada" });
         setTimeout(() => setMsg(null), 4000);
       } else {
@@ -118,7 +112,6 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
           </div>
 
           <div className={styles.body}>
-            {/* Info de cuenta */}
             <div className={styles.infoRow}>
               <span className={styles.label}>Email de cuenta</span>
               <span className={styles.value}>{emailCuenta || "..."}</span>
@@ -126,50 +119,39 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
 
             <div className={styles.divider} />
 
-            {/* ── Seccion SMTP ──────────────────────────────────── */}
+            {/* ── Resend API Key ──────────────────────────────── */}
             <div className={styles.section}>
-              <label className={styles.sectionTitle}>Email remitente (Gmail)</label>
+              <label className={styles.sectionTitle}>API Key de Resend</label>
               <p className={styles.sectionDesc}>
-                Necesario para que CarCare pueda enviar reportes. Usa una cuenta Gmail con
-                {" "}<strong>Contrasena de Aplicacion</strong> (no tu clave normal).
+                Necesario para enviar reportes por email. Resend es gratis (100 emails/mes).
               </p>
 
               <input
                 className={styles.input}
-                type="email"
-                placeholder="tucorreo@gmail.com"
-                value={smtpEmail}
-                onChange={e => setSmtpEmail(e.target.value)}
-              />
-              <input
-                className={styles.input}
                 type="password"
-                placeholder={smtpConfigurado ? "••••••••••••••••  (ya configurada)" : "Contrasena de aplicacion (16 caracteres)"}
-                value={smtpPassword}
-                onChange={e => setSmtpPassword(e.target.value)}
+                placeholder={apiKeyConfigurada ? "re_•••••••••  (ya configurada)" : "re_xxxxxxxxxx..."}
+                value={apiKey}
+                onChange={e => setApiKey(e.target.value)}
               />
 
-              {smtpConfigurado && (
+              {apiKeyConfigurada ? (
                 <div className={styles.currentEmail}>
                   <span className={styles.dot} />
-                  Remitente configurado: <strong>{smtpEmail}</strong>
+                  API Key configurada
                 </div>
-              )}
-              {!smtpConfigurado && (
+              ) : (
                 <div className={styles.currentEmail} style={{ color: "rgba(239,68,68,0.7)" }}>
                   <span className={styles.dot} style={{ background: "#ef4444", boxShadow: "0 0 6px #ef4444" }} />
-                  No configurado — los reportes no se pueden enviar
+                  No configurada — los reportes no se pueden enviar
                 </div>
               )}
 
               <div className={styles.helpBox}>
-                <strong>Como obtener la contrasena:</strong>
+                <strong>Como obtener la API Key (2 minutos):</strong>
                 <ol>
-                  <li>Entra a <em>myaccount.google.com/security</em></li>
-                  <li>Activa <em>Verificacion en 2 pasos</em></li>
-                  <li>Busca <em>Contrasenas de aplicaciones</em></li>
-                  <li>Crea una nueva con nombre &quot;CarCare&quot;</li>
-                  <li>Copia el codigo de 16 letras</li>
+                  <li>Entra a <em>resend.com</em> y crea una cuenta gratis</li>
+                  <li>En el dashboard, ve a <em>API Keys</em></li>
+                  <li>Crea una nueva key y copiala aqui</li>
                 </ol>
               </div>
             </div>
@@ -191,20 +173,18 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
               />
             </div>
 
-            {/* Feedback */}
             {msg && (
               <div className={`${styles.msg} ${msg.tipo === "ok" ? styles.msgOk : styles.msgError}`}>
-                {msg.tipo === "ok" ? "v" : "x"} {msg.texto}
+                {msg.texto}
               </div>
             )}
 
-            {/* Acciones */}
             <div className={styles.actions}>
               <button
                 className={styles.btnSecondary}
                 onClick={testEmail}
-                disabled={testeando || !smtpConfigurado}
-                title={!smtpConfigurado ? "Primero guarda la configuracion SMTP" : ""}
+                disabled={testeando || !apiKeyConfigurada}
+                title={!apiKeyConfigurada ? "Primero guarda la API Key" : ""}
               >
                 {testeando ? "Enviando..." : "Enviar test"}
               </button>

@@ -12,9 +12,8 @@ public class ConfiguracionEmail {
 
     private String empresaId;
 
-    // SMTP sender credentials (Gmail App Password)
-    private String smtpEmail;
-    private String smtpPassword;
+    // Resend API key (https://resend.com)
+    private String resendApiKey;
 
     // Destination email for reports (overrides account email)
     private String emailNotificaciones;

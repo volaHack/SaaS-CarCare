@@ -3,6 +3,7 @@ package com.ecofleet.controller;
 import com.ecofleet.model.ConfiguracionEmail;
 import com.ecofleet.repository.ConfiguracionEmailRepository;
 import com.ecofleet.repository.UsuarioRepository;
+import com.ecofleet.service.EmailService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +18,7 @@ public class ConfiguracionController {
 
     @Autowired private UsuarioRepository usuarioRepository;
     @Autowired private ConfiguracionEmailRepository configEmailRepo;
+    @Autowired private EmailService emailService;
 
     @GetMapping
     public ResponseEntity<Map<String, Object>> getConfiguracion(HttpServletRequest request) {
@@ -28,8 +30,8 @@ public class ConfiguracionController {
                     resp.put("nombreEmpresa", u.getNombreEmpresa() != null ? u.getNombreEmpresa() : u.getNombre());
 
                     ConfiguracionEmail cfg = configEmailRepo.findByEmpresaId(empresaId).orElse(null);
-                    resp.put("smtpEmail", cfg != null && cfg.getSmtpEmail() != null ? cfg.getSmtpEmail() : "");
-                    resp.put("smtpConfigurado", cfg != null && cfg.getSmtpEmail() != null && !cfg.getSmtpEmail().isBlank());
+                    boolean apiKeyConfigurada = cfg != null && cfg.getResendApiKey() != null && !cfg.getResendApiKey().isBlank();
+                    resp.put("apiKeyConfigurada", apiKeyConfigurada);
                     resp.put("emailNotificaciones", cfg != null && cfg.getEmailNotificaciones() != null ? cfg.getEmailNotificaciones() : "");
                     return ResponseEntity.ok(resp);
                 })
@@ -49,13 +51,9 @@ public class ConfiguracionController {
                     return c;
                 });
 
-        if (body.containsKey("smtpEmail")) {
-            String val = body.get("smtpEmail").trim();
-            cfg.setSmtpEmail(val.isEmpty() ? null : val);
-        }
-        if (body.containsKey("smtpPassword")) {
-            String val = body.get("smtpPassword").trim();
-            cfg.setSmtpPassword(val.isEmpty() ? null : val);
+        if (body.containsKey("resendApiKey")) {
+            String val = body.get("resendApiKey").trim();
+            cfg.setResendApiKey(val.isEmpty() ? null : val);
         }
         if (body.containsKey("emailNotificaciones")) {
             String val = body.get("emailNotificaciones").trim();
@@ -63,7 +61,7 @@ public class ConfiguracionController {
         }
 
         configEmailRepo.save(cfg);
-        return ResponseEntity.ok(Map.of("mensaje", "Configuración actualizada"));
+        return ResponseEntity.ok(Map.of("mensaje", "Configuracion actualizada"));
     }
 
     @PostMapping("/test-email")
@@ -71,47 +69,29 @@ public class ConfiguracionController {
         String empresaId = (String) request.getAttribute("userId");
         ConfiguracionEmail cfg = configEmailRepo.findByEmpresaId(empresaId).orElse(null);
 
-        if (cfg == null || cfg.getSmtpEmail() == null || cfg.getSmtpPassword() == null) {
+        if (cfg == null || cfg.getResendApiKey() == null || cfg.getResendApiKey().isBlank()) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", "Primero configurá el email y la contraseña de aplicación"));
+                    .body(Map.of("error", "Primero configura la API Key de Resend"));
+        }
+
+        String destino = cfg.getEmailNotificaciones() != null && !cfg.getEmailNotificaciones().isBlank()
+                ? cfg.getEmailNotificaciones()
+                : usuarioRepository.findById(empresaId).map(u -> u.getEmail()).orElse("");
+
+        if (destino.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "No hay email destino configurado"));
         }
 
         try {
-            org.springframework.mail.javamail.JavaMailSenderImpl sender = new org.springframework.mail.javamail.JavaMailSenderImpl();
-            sender.setHost("smtp.gmail.com");
-            sender.setPort(465);
-            sender.setUsername(cfg.getSmtpEmail());
-            sender.setPassword(cfg.getSmtpPassword());
-            java.util.Properties props = sender.getJavaMailProperties();
-            props.put("mail.smtp.auth", "true");
-            props.put("mail.smtp.ssl.enable", "true");
-            props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
-            props.put("mail.smtp.socketFactory.port", "465");
-            props.put("mail.smtp.connectiontimeout", "10000");
-            props.put("mail.smtp.timeout", "10000");
-
-            String destino = cfg.getEmailNotificaciones() != null && !cfg.getEmailNotificaciones().isBlank()
-                    ? cfg.getEmailNotificaciones()
-                    : usuarioRepository.findById(empresaId).map(u -> u.getEmail()).orElse(cfg.getSmtpEmail());
-
-            jakarta.mail.internet.MimeMessage msg = sender.createMimeMessage();
-            org.springframework.mail.javamail.MimeMessageHelper helper =
-                    new org.springframework.mail.javamail.MimeMessageHelper(msg, true, "UTF-8");
-            helper.setTo(destino);
-            helper.setSubject("✅ CarCare — Test de conexión de email");
-            helper.setText("<div style='font-family:sans-serif;padding:2rem;background:#0d1117;color:#fff;border-radius:12px;'>" +
-                    "<h2 style='color:#22c55e;'>✅ Conexión exitosa</h2>" +
-                    "<p>Tu configuración de email en CarCare funciona correctamente.</p>" +
-                    "<p style='color:#6b7280;font-size:0.85rem;'>Los reportes mensuales se enviarán a esta dirección.</p></div>", true);
-            sender.send(msg);
+            String html = "<div style='font-family:sans-serif;padding:2rem;background:#0d1117;color:#fff;border-radius:12px;'>" +
+                    "<h2 style='color:#22c55e;'>Conexion exitosa</h2>" +
+                    "<p>Tu configuracion de email en CarCare funciona correctamente.</p>" +
+                    "<p style='color:#6b7280;font-size:0.85rem;'>Los reportes mensuales se enviaran a esta direccion.</p></div>";
+            emailService.enviar(cfg.getResendApiKey(), destino, "CarCare - Test de conexion de email", html);
             return ResponseEntity.ok(Map.of("mensaje", "Email de prueba enviado a " + destino));
         } catch (Exception e) {
-            String causa = e.getMessage();
-            if (causa != null && causa.contains("AuthenticationFailedException")) {
-                causa = "Credenciales incorrectas. Verificá el email y la contraseña de aplicación.";
-            }
             return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Error al enviar: " + causa));
+                    .body(Map.of("error", e.getMessage()));
         }
     }
 }
