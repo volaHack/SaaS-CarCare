@@ -85,6 +85,7 @@ export default function Dashboard() {
   const [rutas, setRutas] = useState<Ruta[]>([]);
   const [repostajes, setRepostajes] = useState<Repostaje[]>([]);
   const [loading, setLoading] = useState(true);
+  const [enviandoReporte, setEnviandoReporte] = useState(false);
 
   // Helper to get auth headers
   const getAuthHeaders = useCallback((): Record<string, string> => {
@@ -1034,6 +1035,52 @@ export default function Dashboard() {
                     Limpiar datos manuales
                   </button>
                 )}
+              </div>
+
+              {/* ── Reporte Mensual ──────────────────────────────────────────── */}
+              <div className={styles.card} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
+              <div>
+                <h3 style={{ color: "#fff", fontSize: "1rem", marginBottom: "0.25rem" }}>📧 Reporte Mensual por Email</h3>
+                <p style={{ color: "#6b7280", fontSize: "0.82rem", margin: 0 }}>
+                  Recibí un resumen con KPIs de flota, combustible y mantenimiento en tu email.
+                </p>
+              </div>
+              <button
+                disabled={enviandoReporte}
+                onClick={async () => {
+                  setEnviandoReporte(true);
+                  try {
+                    const res = await fetch(`${API_URL}/api/reportes/enviar`, {
+                      method: "POST",
+                      headers: getAuthHeaders(),
+                    });
+                    if (res.ok) {
+                      toast.success("Reporte enviado a tu email correctamente");
+                    } else {
+                      const data = await res.json().catch(() => ({}));
+                      toast.error(data.error || "No se pudo enviar el reporte");
+                    }
+                  } catch {
+                    toast.error("Error de conexión al enviar el reporte");
+                  } finally {
+                    setEnviandoReporte(false);
+                  }
+                }}
+                style={{
+                  padding: "0.6rem 1.4rem",
+                  background: enviandoReporte ? "rgba(99,102,241,0.3)" : "rgba(99,102,241,0.15)",
+                  border: "1px solid rgba(99,102,241,0.4)",
+                  borderRadius: "10px",
+                  color: enviandoReporte ? "#9ca3af" : "#a5b4fc",
+                  cursor: enviandoReporte ? "not-allowed" : "pointer",
+                  fontSize: "0.85rem",
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                  transition: "all 0.2s",
+                }}
+              >
+                {enviandoReporte ? "Enviando..." : "Enviar Reporte"}
+              </button>
               </div>
             </div>
           )}
