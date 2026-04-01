@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import styles from "./page.module.css";
 import BackgroundMeteors from "@/componentes/BackgroundMeteors";
 import LocationInput from "@/componentes/LocationInput";
+import AlertasPanel from "@/componentes/AlertasPanel";
 import dynamic from "next/dynamic";
 import {
   XAxis,
@@ -476,7 +477,15 @@ export default function Dashboard() {
               <h1>./CarCare Tracker</h1>
               <p className={styles.subtitle}>Gestion de Flota de mano de CarCare Tracker para la Organización y Sostenibilidad de la flota de coches de una empresa</p>
             </div>
-            <div className={styles.status}>
+            <div className={styles.status} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginLeft: 'auto' }}>
+              <AlertasPanel
+                apiUrl={API_URL}
+                getAuthHeaders={getAuthHeaders}
+                onNavigate={(rutaId, vehiculoId) => {
+                  if (rutaId) { router.push(`/ruta/${rutaId}`); }
+                  else if (vehiculoId) { router.push(`/vehiculo/${vehiculoId}`); }
+                }}
+              />
               <button
                 onClick={handleLogout}
                 className={styles.submitButton}
