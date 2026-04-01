@@ -2,34 +2,34 @@ package com.ecofleet.service;
 
 import com.ecofleet.model.*;
 import com.ecofleet.repository.*;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.mail.javamail.JavaMailSender;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import jakarta.mail.internet.MimeMessage;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.Month;
 import java.time.format.TextStyle;
 import java.util.List;
 import java.util.Locale;
+import java.util.Properties;
 import java.util.stream.Collectors;
 
-@Slf4j
 @Service
-@RequiredArgsConstructor
 public class ReporteService {
 
-    private final UsuarioRepository usuarioRepository;
-    private final VehiculoRepository vehiculoRepository;
-    private final RutaRepository rutaRepository;
-    private final RepostajeRepository repostajeRepository;
-    private final MantenimientoPreventivoRepository preventivosRepo;
-    private final MantenimientoCorrectivoRepository correctivosRepo;
-    private final JavaMailSender mailSender;
+    private static final Logger log = LoggerFactory.getLogger(ReporteService.class);
+
+    @Autowired private UsuarioRepository usuarioRepository;
+    @Autowired private VehiculoRepository vehiculoRepository;
+    @Autowired private RutaRepository rutaRepository;
+    @Autowired private RepostajeRepository repostajeRepository;
+    @Autowired private MantenimientoPreventivoRepository preventivosRepo;
+    @Autowired private MantenimientoCorrectivoRepository correctivosRepo;
+    @Autowired private ConfiguracionEmailRepository configEmailRepo;
 
     // ─── Scheduler: día 1 de cada mes a las 8:00 ─────────────────────────────
     @Scheduled(cron = "0 0 8 1 * *")
@@ -115,9 +115,14 @@ public class ReporteService {
 
         double costeTotal = costeCombustible + costeMantenimiento;
 
-        // Email destino: emailNotificaciones si está configurado, sino el de la cuenta
-        String emailDestino = (admin.getEmailNotificaciones() != null && !admin.getEmailNotificaciones().isBlank())
-                ? admin.getEmailNotificaciones()
+        // ── Config email de la DB ─────────────────────────────────────────────
+        ConfiguracionEmail cfg = configEmailRepo.findByEmpresaId(empresaId).orElse(null);
+        if (cfg == null || cfg.getSmtpEmail() == null || cfg.getSmtpPassword() == null) {
+            throw new IllegalStateException("Email no configurado. Configurá el remitente desde el panel de Ajustes del dashboard.");
+        }
+
+        String emailDestino = (cfg.getEmailNotificaciones() != null && !cfg.getEmailNotificaciones().isBlank())
+                ? cfg.getEmailNotificaciones()
                 : admin.getEmail();
 
         // ── Construir y enviar email ───────────────────────────────────────────
@@ -132,13 +137,28 @@ public class ReporteService {
                 costeTotal
         );
 
-        MimeMessage msg = mailSender.createMimeMessage();
+        JavaMailSenderImpl sender = crearMailSender(cfg.getSmtpEmail(), cfg.getSmtpPassword());
+        MimeMessage msg = sender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(msg, true, "UTF-8");
         helper.setTo(emailDestino);
-        helper.setSubject(String.format("📊 Reporte Mensual CarCare — %s %d", mesNombre, year));
+        helper.setSubject(String.format("\uD83D\uDCCA Reporte Mensual CarCare — %s %d", mesNombre, year));
         helper.setText(html, true);
-        mailSender.send(msg);
-        log.info("Reporte mensual enviado a {} ({})", admin.getEmail(), empresaId);
+        sender.send(msg);
+        log.info("Reporte mensual enviado a {} ({})", emailDestino, empresaId);
+    }
+
+    // ─── Mail sender dinámico desde config guardada en DB ───────────────────
+    private JavaMailSenderImpl crearMailSender(String email, String password) {
+        JavaMailSenderImpl sender = new JavaMailSenderImpl();
+        sender.setHost("smtp.gmail.com");
+        sender.setPort(587);
+        sender.setUsername(email);
+        sender.setPassword(password);
+        Properties props = sender.getJavaMailProperties();
+        props.put("mail.smtp.auth", "true");
+        props.put("mail.smtp.starttls.enable", "true");
+        props.put("mail.smtp.starttls.required", "true");
+        return sender;
     }
 
     // ─── Template HTML ────────────────────────────────────────────────────────

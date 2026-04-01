@@ -2,7 +2,7 @@ package com.ecofleet.controller;
 
 import com.ecofleet.service.ReporteService;
 import jakarta.servlet.http.HttpServletRequest;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -10,10 +10,10 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/reportes")
-@RequiredArgsConstructor
 public class ReporteController {
 
-    private final ReporteService reporteService;
+    @Autowired
+    private ReporteService reporteService;
 
     @PostMapping("/enviar")
     public ResponseEntity<Map<String, String>> enviarReporte(HttpServletRequest request) {

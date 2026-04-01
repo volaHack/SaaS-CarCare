@@ -265,3 +265,34 @@
 }
 
 .btnSecondary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Help box */
+.helpBox {
+  background: rgba(59, 130, 246, 0.06);
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  border-radius: 8px;
+  padding: 0.75rem 0.85rem;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.6;
+}
+
+.helpBox strong {
+  color: rgba(255, 255, 255, 0.7);
+  display: block;
+  margin-bottom: 0.3rem;
+}
+
+.helpBox ol {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.helpBox li {
+  margin-bottom: 0.15rem;
+}
+
+.helpBox em {
+  color: rgba(96, 165, 250, 0.8);
+  font-style: normal;
+}
