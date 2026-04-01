@@ -10,9 +10,11 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -107,8 +109,7 @@ public class AlertaService {
                 if (r.getInicioDetencion() != null) {
                     try {
                         long secs = (Instant.now().toEpochMilli() - Instant.parse(r.getInicioDetencion()).toEpochMilli()) / 1000;
-                        long mins = secs / 60;
-                        duracion = mins > 0 ? " · " + mins + " minutos parado" : "";
+                        duracion = secs > 0 ? " · " + formatearDuracion(secs) + " parado" : "";
                     } catch (Exception ignored) {}
                 }
                 crearSiNoExiste(key, empresaId, "RUTA_DETENIDA", "WARNING",
@@ -137,10 +138,9 @@ public class AlertaService {
                     if (secsDesdeGPS > 600) { // Más de 10 minutos sin GPS
                         String key = "gps_" + r.getId();
                         grupoKeysActivos.add(key);
-                        long mins = secsDesdeGPS / 60;
                         crearSiNoExiste(key, empresaId, "GPS_PERDIDO", "WARNING",
                                 "Señal GPS perdida — " + label,
-                                "Sin actualización GPS desde hace " + mins + " minutos",
+                                "Sin actualización GPS desde hace " + formatearDuracion(secsDesdeGPS),
                                 r.getVehiculoId(), r.getId(), label);
                     } else {
                         resolverSiExiste("gps_" + r.getId());
@@ -161,32 +161,114 @@ public class AlertaService {
     private void crearSiNoExiste(String grupoKey, String empresaId, String tipo, String severidad,
                                   String titulo, String descripcion,
                                   String vehiculoId, String rutaId, String vehiculoInfo) {
-        if (alertaRepository.existsByGrupoKeyAndLeidaFalseAndResueltaFalse(grupoKey)) return;
+        List<Alerta> activas = alertaRepository.findByGrupoKeyAndResueltaFalseOrderByTimestampDesc(grupoKey);
+
+        if (!activas.isEmpty()) {
+            Alerta principal = activas.get(0);
+            boolean actualizada = actualizarAlerta(principal, empresaId, tipo, severidad, titulo, descripcion, vehiculoId, rutaId, vehiculoInfo);
+            if (actualizada) {
+                alertaRepository.save(principal);
+            }
+
+            if (activas.size() > 1) {
+                for (int i = 1; i < activas.size(); i++) {
+                    Alerta duplicada = activas.get(i);
+                    duplicada.setResuelta(true);
+                    alertaRepository.save(duplicada);
+                }
+                log.info("[Alertas] Se consolidaron {} alertas duplicadas para {}", activas.size() - 1, grupoKey);
+            }
+            return;
+        }
 
         Alerta alerta = new Alerta();
         alerta.setGrupoKey(grupoKey);
-        alerta.setEmpresaId(empresaId);
-        alerta.setTipo(tipo);
-        alerta.setSeveridad(severidad);
-        alerta.setTitulo(titulo);
-        alerta.setDescripcion(descripcion);
-        alerta.setVehiculoId(vehiculoId);
-        alerta.setRutaId(rutaId);
-        alerta.setVehiculoInfo(vehiculoInfo);
-        alerta.setTimestamp(LocalDateTime.now());
         alerta.setLeida(false);
         alerta.setResuelta(false);
-
+        actualizarAlerta(alerta, empresaId, tipo, severidad, titulo, descripcion, vehiculoId, rutaId, vehiculoInfo);
         alertaRepository.save(alerta);
         log.info("[Alertas] Nueva alerta: {} — {}", severidad, titulo);
     }
 
     private void resolverSiExiste(String grupoKey) {
-        Optional<Alerta> existing = alertaRepository.findByGrupoKeyAndResueltaFalse(grupoKey);
-        existing.ifPresent(a -> {
+        List<Alerta> activas = alertaRepository.findByGrupoKeyAndResueltaFalseOrderByTimestampDesc(grupoKey);
+        activas.forEach(a -> {
             a.setResuelta(true);
             alertaRepository.save(a);
         });
+    }
+
+    private boolean actualizarAlerta(Alerta alerta, String empresaId, String tipo, String severidad,
+                                     String titulo, String descripcion,
+                                     String vehiculoId, String rutaId, String vehiculoInfo) {
+        boolean cambio = false;
+
+        if (!empresaId.equals(alerta.getEmpresaId())) {
+            alerta.setEmpresaId(empresaId);
+            cambio = true;
+        }
+        if (!tipo.equals(alerta.getTipo())) {
+            alerta.setTipo(tipo);
+            cambio = true;
+        }
+        if (!severidad.equals(alerta.getSeveridad())) {
+            alerta.setSeveridad(severidad);
+            cambio = true;
+        }
+        if (!titulo.equals(alerta.getTitulo())) {
+            alerta.setTitulo(titulo);
+            cambio = true;
+        }
+        if (!descripcion.equals(alerta.getDescripcion())) {
+            alerta.setDescripcion(descripcion);
+            cambio = true;
+        }
+        if (!equalsNullable(vehiculoId, alerta.getVehiculoId())) {
+            alerta.setVehiculoId(vehiculoId);
+            cambio = true;
+        }
+        if (!equalsNullable(rutaId, alerta.getRutaId())) {
+            alerta.setRutaId(rutaId);
+            cambio = true;
+        }
+        if (!equalsNullable(vehiculoInfo, alerta.getVehiculoInfo())) {
+            alerta.setVehiculoInfo(vehiculoInfo);
+            cambio = true;
+        }
+        if (alerta.isResuelta()) {
+            alerta.setResuelta(false);
+            cambio = true;
+        }
+        if (cambio || alerta.getTimestamp() == null) {
+            alerta.setTimestamp(LocalDateTime.now());
+            return true;
+        }
+        return false;
+    }
+
+    private boolean equalsNullable(String a, String b) {
+        return a == null ? b == null : a.equals(b);
+    }
+
+    private String formatearDuracion(long segundos) {
+        long minutosTotales = Math.max(1, segundos / 60);
+        long dias = minutosTotales / (24 * 60);
+        long horas = (minutosTotales % (24 * 60)) / 60;
+        long minutos = minutosTotales % 60;
+
+        if (dias > 0) {
+            return horas > 0
+                    ? dias + " d " + horas + " h"
+                    : dias + " d";
+        }
+
+        if (horas > 0) {
+            return minutos > 0
+                    ? horas + " h " + minutos + " min"
+                    : horas + " h";
+        }
+
+        return minutos + " min";
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -194,7 +276,8 @@ public class AlertaService {
     // ═══════════════════════════════════════════════════════════════
 
     public List<Alerta> getAlertasActivas(String empresaId) {
-        return alertaRepository.findByEmpresaIdAndResueltaFalseOrderByTimestampDesc(empresaId);
+        List<Alerta> activas = alertaRepository.findByEmpresaIdAndResueltaFalseOrderByTimestampDesc(empresaId);
+        return consolidarDuplicadas(activas);
     }
 
     public long getNoLeidas(String empresaId) {
@@ -212,5 +295,29 @@ public class AlertaService {
         List<Alerta> noLeidas = alertaRepository.findByEmpresaIdAndLeidaFalseAndResueltaFalse(empresaId);
         noLeidas.forEach(a -> a.setLeida(true));
         alertaRepository.saveAll(noLeidas);
+    }
+
+    private List<Alerta> consolidarDuplicadas(List<Alerta> alertas) {
+        Map<String, Alerta> porGrupo = new HashMap<>();
+        List<Alerta> visibles = new ArrayList<>();
+
+        for (Alerta alerta : alertas) {
+            String grupoKey = alerta.getGrupoKey();
+            if (grupoKey == null || grupoKey.isBlank()) {
+                visibles.add(alerta);
+                continue;
+            }
+
+            if (!porGrupo.containsKey(grupoKey)) {
+                porGrupo.put(grupoKey, alerta);
+                visibles.add(alerta);
+                continue;
+            }
+
+            alerta.setResuelta(true);
+            alertaRepository.save(alerta);
+        }
+
+        return visibles;
     }
 }

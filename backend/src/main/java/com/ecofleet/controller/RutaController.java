@@ -1,10 +1,14 @@
 package com.ecofleet.controller;
 
+import com.ecofleet.model.Conductor;
 import com.ecofleet.model.Ruta;
+import com.ecofleet.repository.ConductorRepository;
 import com.ecofleet.repository.RutaRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.time.Instant;
@@ -17,19 +21,34 @@ public class RutaController {
     @Autowired
     private RutaRepository rutaRepository;
 
+    @Autowired
+    private ConductorRepository conductorRepository;
+
     @GetMapping
     public List<Ruta> listarRutas(HttpServletRequest request) {
         String usuarioId = (String) request.getAttribute("userId");
+        String role = (String) request.getAttribute("userRole");
+        String conductorId = (String) request.getAttribute("conductorId");
+
+        if ("CONDUCTOR".equals(role) && conductorId != null && !conductorId.isBlank()) {
+            return rutaRepository.findByUsuarioIdAndConductorId(usuarioId, conductorId);
+        }
+
         return rutaRepository.findByUsuarioId(usuarioId);
     }
 
     @PostMapping
     public Ruta crearRuta(@RequestBody Ruta ruta, HttpServletRequest request) {
         String usuarioId = (String) request.getAttribute("userId");
+        String role = (String) request.getAttribute("userRole");
+        if ("CONDUCTOR".equals(role)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Los conductores no pueden crear rutas");
+        }
         ruta.setUsuarioId(usuarioId);
         if (ruta.getEstado() == null) {
             ruta.setEstado("PLANIFICADA");
         }
+        aplicarAsignacionConductor(ruta, ruta.getConductorId(), usuarioId);
         return rutaRepository.save(ruta);
     }
     
@@ -39,9 +58,30 @@ public class RutaController {
     }
 
     @PutMapping("/{id}")
-    public Ruta actualizarRuta(@PathVariable String id, @RequestBody Ruta rutaActualizada) {
+    public Ruta actualizarRuta(@PathVariable String id, @RequestBody Ruta rutaActualizada, HttpServletRequest request) {
+        String usuarioId = (String) request.getAttribute("userId");
+        String role = (String) request.getAttribute("userRole");
+        String conductorId = (String) request.getAttribute("conductorId");
+
         return rutaRepository.findById(id)
                 .map(ruta -> {
+                    validarAccesoRuta(ruta, usuarioId, role, conductorId);
+
+                    if (!"CONDUCTOR".equals(role)) {
+                        if (rutaActualizada.getOrigen() != null) ruta.setOrigen(rutaActualizada.getOrigen());
+                        if (rutaActualizada.getDestino() != null) ruta.setDestino(rutaActualizada.getDestino());
+                        if (rutaActualizada.getDistanciaEstimadaKm() != null) ruta.setDistanciaEstimadaKm(rutaActualizada.getDistanciaEstimadaKm());
+                        if (rutaActualizada.getVehiculoId() != null) ruta.setVehiculoId(rutaActualizada.getVehiculoId());
+                        if (rutaActualizada.getFecha() != null) ruta.setFecha(rutaActualizada.getFecha());
+                        if (rutaActualizada.getLatitudOrigen() != null) ruta.setLatitudOrigen(rutaActualizada.getLatitudOrigen());
+                        if (rutaActualizada.getLongitudOrigen() != null) ruta.setLongitudOrigen(rutaActualizada.getLongitudOrigen());
+                        if (rutaActualizada.getLatitudDestino() != null) ruta.setLatitudDestino(rutaActualizada.getLatitudDestino());
+                        if (rutaActualizada.getLongitudDestino() != null) ruta.setLongitudDestino(rutaActualizada.getLongitudDestino());
+                        if (rutaActualizada.getConductorId() != null || rutaActualizada.getConductorNombre() != null) {
+                            aplicarAsignacionConductor(ruta, rutaActualizada.getConductorId(), usuarioId);
+                        }
+                    }
+
                     // Si se está iniciando la ruta (cambio a EN_CURSO) y no tiene posición GPS actual
                     // Inicializar con la posición de origen
                     if (rutaActualizada.getEstado() != null && 
@@ -127,12 +167,19 @@ public class RutaController {
                     
                     return rutaRepository.save(ruta);
                 })
-                .orElse(null);
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ruta no encontrada"));
     }
 
     @GetMapping("/{id}")
-    public Ruta obtenerRuta(@PathVariable String id) {
-        return rutaRepository.findById(id).orElse(null);
+    public Ruta obtenerRuta(@PathVariable String id, HttpServletRequest request) {
+        String usuarioId = (String) request.getAttribute("userId");
+        String role = (String) request.getAttribute("userRole");
+        String conductorId = (String) request.getAttribute("conductorId");
+
+        Ruta ruta = rutaRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ruta no encontrada"));
+        validarAccesoRuta(ruta, usuarioId, role, conductorId);
+        return ruta;
     }
 
     // Endpoint específico para que Android envíe actualizaciones de GPS en tiempo real
@@ -266,8 +313,56 @@ public class RutaController {
     }
 
     @DeleteMapping("/{id}")
-    public void eliminarRuta(@PathVariable String id) {
+    public void eliminarRuta(@PathVariable String id, HttpServletRequest request) {
+        String usuarioId = (String) request.getAttribute("userId");
+        String role = (String) request.getAttribute("userRole");
+        if ("CONDUCTOR".equals(role)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Los conductores no pueden eliminar rutas");
+        }
+        Ruta ruta = rutaRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ruta no encontrada"));
+        validarAccesoRuta(ruta, usuarioId, role, null);
         rutaRepository.deleteById(id);
+    }
+
+    private void validarAccesoRuta(Ruta ruta, String usuarioId, String role, String conductorId) {
+        if (ruta == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Ruta no encontrada");
+        }
+        if (usuarioId == null || !usuarioId.equals(ruta.getUsuarioId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Ruta fuera del alcance de la sesión");
+        }
+        if ("CONDUCTOR".equals(role)) {
+            if (conductorId == null || conductorId.isBlank()) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Conductor no identificado");
+            }
+            if (!conductorId.equals(ruta.getConductorId())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Ruta no asignada a este conductor");
+            }
+        }
+    }
+
+    private void aplicarAsignacionConductor(Ruta ruta, String conductorId, String usuarioId) {
+        if (conductorId == null) {
+            return;
+        }
+
+        String conductorIdNormalizado = conductorId.trim();
+        if (conductorIdNormalizado.isEmpty()) {
+            ruta.setConductorId(null);
+            ruta.setConductorNombre(null);
+            return;
+        }
+
+        Conductor conductor = conductorRepository.findById(conductorIdNormalizado)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Conductor no encontrado"));
+
+        if (!usuarioId.equals(conductor.getEmpresaId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El conductor no pertenece a esta empresa");
+        }
+
+        ruta.setConductorId(conductor.getId());
+        ruta.setConductorNombre(conductor.getNombre());
     }
 
     // Clase interna para recibir coordenadas GPS

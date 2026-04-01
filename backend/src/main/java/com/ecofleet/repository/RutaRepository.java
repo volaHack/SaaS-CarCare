@@ -8,5 +8,6 @@ import java.util.List;
 @Repository
 public interface RutaRepository extends MongoRepository<Ruta, String> {
     List<Ruta> findByUsuarioId(String usuarioId);
+    List<Ruta> findByUsuarioIdAndConductorId(String usuarioId, String conductorId);
     List<Ruta> findByVehiculoId(String vehiculoId);
 }

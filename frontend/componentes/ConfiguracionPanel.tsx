@@ -118,16 +118,16 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
 
             {/* Email destino */}
             <div className={styles.section}>
-              <label className={styles.sectionTitle}>Recibir reportes en otro email</label>
+              <label className={styles.sectionTitle}>Recibir reportes en uno o varios emails</label>
               <p className={styles.sectionDesc}>
                 Por defecto los reportes llegan a tu email de cuenta.
-                Si queres que lleguen a otro correo, escribilo aca.
+                Si queres que lleguen a otros correos, separalos con coma.
               </p>
 
               <input
                 className={styles.input}
-                type="email"
-                placeholder={emailCuenta || "otro@email.com"}
+                type="text"
+                placeholder={emailCuenta || "gerencia@empresa.com, operaciones@empresa.com"}
                 value={emailNotif}
                 onChange={e => setEmailNotif(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && hayCambios) guardar(); }}

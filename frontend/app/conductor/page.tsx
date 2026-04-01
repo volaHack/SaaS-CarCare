@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import BackgroundMeteors from "@/componentes/BackgroundMeteors";
-import styles from "../dashboard/page.module.css";
 import ChatRuta from "@/componentes/ChatRuta";
 
 interface Ruta {
@@ -17,24 +16,35 @@ interface Ruta {
     fecha: string;
 }
 
-// En desarrollo (móvil), usamos rutas relativas que Next.js redirigirá al backend de Railway
-// En producción, usamos la URL directa del backend
+interface DriverUser {
+    id: string;
+    nombre?: string;
+    email?: string;
+    rol?: string;
+}
+
 const API_URL = typeof window !== 'undefined' && window.location.hostname === '10.0.2.2'
-    ? '' // Ruta relativa para que Next.js haga de proxy
+    ? ''
     : (process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production-54f9.up.railway.app");
 
 export default function ConductorDashboard() {
     const [rutas, setRutas] = useState<Ruta[]>([]);
+    const [rutasCompletadas, setRutasCompletadas] = useState<Ruta[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<'inicio' | 'historial' | 'chat' | 'perfil'>('inicio');
+    const [isOnline, setIsOnline] = useState(true);
+    const [elapsedSeconds, setElapsedSeconds] = useState(0);
+    const [routeStartTime, setRouteStartTime] = useState<Date | null>(null);
+    const [driverUser, setDriverUser] = useState<DriverUser | null>(null);
 
-    const router = useRouter(); // Import useRouter at top level if not already imported, otherwise add it inside component
+    const router = useRouter();
+    const gpsWatchIdRef = useRef<number | null>(null);
+    const [gpsInterval, setGpsInterval] = useState<NodeJS.Timeout | null>(null);
 
-    // Helper to get auth headers
     const getAuthHeaders = (): Record<string, string> => {
         const headers: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
         if (typeof window === 'undefined') return headers;
-
         const token = localStorage.getItem("token");
         if (token) headers['Authorization'] = `Bearer ${token}`;
         return headers;
@@ -43,34 +53,18 @@ export default function ConductorDashboard() {
     const cargarRutas = async () => {
         try {
             setError(null);
-            console.log('[ConductorDashboard] Iniciando carga de rutas desde:', API_URL);
-
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => {
-                console.log('[ConductorDashboard] Timeout alcanzado después de 8 segundos');
-                controller.abort();
-            }, 8000);
-
-            const url = `${API_URL}/api/rutas`;
-            console.log('[ConductorDashboard] Haciendo fetch a:', url);
-
-            const res = await fetch(url, {
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
+            const res = await fetch(`${API_URL}/api/rutas`, {
                 signal: controller.signal,
                 mode: 'cors',
                 headers: getAuthHeaders()
             });
             clearTimeout(timeoutId);
-
-            console.log('[ConductorDashboard] Respuesta recibida:', {
-                status: res.status,
-                ok: res.ok,
-                statusText: res.statusText
-            });
-
             if (res.ok) {
                 const data = await res.json();
-                console.log('[ConductorDashboard] Datos recibidos:', data.length, 'rutas');
                 setRutas(data.filter((r: Ruta) => r.estado !== 'COMPLETADA'));
+                setRutasCompletadas(data.filter((r: Ruta) => r.estado === 'COMPLETADA'));
                 setLoading(false);
             } else {
                 if (res.status === 401 || res.status === 403) {
@@ -78,16 +72,11 @@ export default function ConductorDashboard() {
                     router.push("/conductor/login");
                     return;
                 }
-                throw new Error(`Error del servidor: ${res.status} ${res.statusText}`);
+                throw new Error(`Error del servidor: ${res.status}`);
             }
         } catch (err: any) {
-            console.error('[ConductorDashboard] Error cargando rutas:', {
-                name: err.name,
-                message: err.message,
-                stack: err.stack
-            });
             const errorMsg = err.name === 'AbortError'
-                ? "Tiempo de espera agotado - El servidor no responde"
+                ? "Tiempo de espera agotado — el servidor no responde"
                 : `Error de conexión: ${err.message}`;
             setError(errorMsg);
             toast.error(errorMsg);
@@ -97,14 +86,13 @@ export default function ConductorDashboard() {
     };
 
     useEffect(() => {
-        // Verificar autenticación
         const userStr = localStorage.getItem("user");
         if (!userStr) {
-            toast.error("Debes iniciar sesión para acceder al panel de conductor");
+            toast.error("Debes iniciar sesión");
             router.push("/conductor/login");
             return;
         }
-
+        try { setDriverUser(JSON.parse(userStr)); } catch {}
         cargarRutas();
         const interval = setInterval(cargarRutas, 10000);
         return () => {
@@ -113,91 +101,56 @@ export default function ConductorDashboard() {
         };
     }, []);
 
-    // GPS Fallback para navegador
-    const [gpsInterval, setGpsInterval] = useState<NodeJS.Timeout | null>(null);
-    const gpsWatchIdRef = useRef<number | null>(null);
+    // Timer para ruta activa
+    useEffect(() => {
+        const activa = rutas.find(r => r.estado === 'EN_CURSO');
+        if (activa && !routeStartTime) setRouteStartTime(new Date());
+        else if (!activa) { setRouteStartTime(null); setElapsedSeconds(0); }
+    }, [rutas]);
+
+    useEffect(() => {
+        if (!routeStartTime) return;
+        const timer = setInterval(() => {
+            setElapsedSeconds(Math.floor((Date.now() - routeStartTime.getTime()) / 1000));
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [routeStartTime]);
+
+    const formatElapsed = (s: number) => {
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+        if (h > 0) return `${h}h ${m.toString().padStart(2, '0')}m`;
+        return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+    };
 
     const startBrowserGPS = (rutaId: string) => {
-        if (!navigator.geolocation) {
-            toast.error("GPS no disponible en este navegador");
-            return;
-        }
-
-        gpsInterval && clearInterval(gpsInterval);
-
-        // Primero solicitar permiso y obtener posición inicial
+        if (!navigator.geolocation) { toast.error("GPS no disponible"); return; }
         navigator.geolocation.getCurrentPosition(
             async (position) => {
-                toast.success(`GPS encontrado: ${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`);
-
-                // Actualizar posición inicial inmediatamente usando endpoint GPS dedicado
+                toast.success("GPS activado");
                 try {
                     await fetch(`${API_URL}/api/rutas/${rutaId}/gps`, {
-                        method: 'POST',
-                        headers: getAuthHeaders(),
-                        body: JSON.stringify({
-                            latitud: position.coords.latitude,
-                            longitud: position.coords.longitude
-                        })
+                        method: 'POST', headers: getAuthHeaders(),
+                        body: JSON.stringify({ latitud: position.coords.latitude, longitud: position.coords.longitude })
                     });
-                } catch (err) {
-                    console.error("Error updating initial GPS:", err);
-                }
-
-                // Luego usar watchPosition para actualizaciones continuas
+                } catch {}
                 const watchId = navigator.geolocation.watchPosition(
-                    async (position) => {
-                        console.log(`GPS Update: ${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`);
+                    async (pos) => {
                         try {
                             await fetch(`${API_URL}/api/rutas/${rutaId}/gps`, {
-                                method: 'POST',
-                                headers: getAuthHeaders(),
-                                body: JSON.stringify({
-                                    latitud: position.coords.latitude,
-                                    longitud: position.coords.longitude
-                                })
+                                method: 'POST', headers: getAuthHeaders(),
+                                body: JSON.stringify({ latitud: pos.coords.latitude, longitud: pos.coords.longitude })
                             });
-                        } catch (err) {
-                            console.error("Error updating GPS:", err);
-                        }
+                        } catch {}
                     },
-                    (error) => {
-                        console.error("GPS Watch Error:", error);
-                        if (error.code === error.PERMISSION_DENIED) {
-                            toast.error("Permiso de GPS denegado. Activa el GPS y recarga la página.");
-                        } else if (error.code === error.POSITION_UNAVAILABLE) {
-                            toast.error("GPS no disponible. Revisa tu conexión GPS.");
-                        } else {
-                            toast.error(`Error GPS: ${error.message}`);
-                        }
-                    },
-                    {
-                        enableHighAccuracy: true,
-                        timeout: 15000,
-                        maximumAge: 0
-                    }
+                    (err) => { if (err.code === err.PERMISSION_DENIED) toast.error("Permiso GPS denegado"); },
+                    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
                 );
-
-                // Guardar el watchId en una ref para poder limpiarlo después
                 gpsWatchIdRef.current = watchId;
-                const interval = setInterval(() => { }, 1000);
-                setGpsInterval(interval);
             },
-            (error) => {
-                console.error("GPS Initial Error:", error);
-                if (error.code === error.PERMISSION_DENIED) {
-                    toast.error("🚫 Permiso de GPS denegado. Activa el GPS en tu navegador y recarga.");
-                } else if (error.code === error.POSITION_UNAVAILABLE) {
-                    toast.error("📡 GPS no disponible. Revisa tu conexión.");
-                } else {
-                    toast.error(`❌ Error GPS: ${error.message}`);
-                }
-            },
-            {
-                enableHighAccuracy: true,
-                timeout: 20000,
-                maximumAge: 60000
-            }
+            (err) => { if (err.code === err.PERMISSION_DENIED) toast.error("Permiso GPS denegado"); },
+            { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 }
         );
     };
 
@@ -206,280 +159,485 @@ export default function ConductorDashboard() {
             navigator.geolocation.clearWatch(gpsWatchIdRef.current);
             gpsWatchIdRef.current = null;
         }
-        if (gpsInterval) {
-            clearInterval(gpsInterval);
-            setGpsInterval(null);
-        }
+        if (gpsInterval) { clearInterval(gpsInterval); setGpsInterval(null); }
     };
 
     const toggleRuta = async (ruta: Ruta) => {
         const nuevoEstado = ruta.estado === 'EN_CURSO' ? 'PLANIFICADA' : 'EN_CURSO';
-
-        // Native GPS Trigger
         if (typeof window !== 'undefined' && (window as any).AndroidTracker) {
-            if (nuevoEstado === 'EN_CURSO') {
-                (window as any).AndroidTracker.startTracking(ruta.id);
-            } else {
-                (window as any).AndroidTracker.stopTracking();
-            }
+            if (nuevoEstado === 'EN_CURSO') (window as any).AndroidTracker.startTracking(ruta.id);
+            else (window as any).AndroidTracker.stopTracking();
         } else {
-            // Fallback GPS para navegador web
-            if (nuevoEstado === 'EN_CURSO') {
-                startBrowserGPS(ruta.id);
-            } else {
-                stopBrowserGPS();
-            }
+            if (nuevoEstado === 'EN_CURSO') startBrowserGPS(ruta.id);
+            else stopBrowserGPS();
         }
-
         try {
             await fetch(`${API_URL}/api/rutas/${ruta.id}`, {
-                method: 'PUT',
-                headers: getAuthHeaders(),
+                method: 'PUT', headers: getAuthHeaders(),
                 body: JSON.stringify({ estado: nuevoEstado })
             });
             cargarRutas();
-            toast.success(`Ruta ${nuevoEstado === 'EN_CURSO' ? 'Iniciada' : 'Detenida'}`);
-        } catch (err) {
-            toast.error("Error al actualizar estado");
-        }
+            toast.success(nuevoEstado === 'EN_CURSO' ? 'Trayecto iniciado' : 'Trayecto pausado');
+        } catch { toast.error("Error al actualizar estado"); }
     };
+
+    const completarRuta = async (ruta: Ruta) => {
+        stopBrowserGPS();
+        if (typeof window !== 'undefined' && (window as any).AndroidTracker) (window as any).AndroidTracker.stopTracking();
+        try {
+            await fetch(`${API_URL}/api/rutas/${ruta.id}`, {
+                method: 'PUT', headers: getAuthHeaders(),
+                body: JSON.stringify({ estado: 'COMPLETADA' })
+            });
+            cargarRutas();
+            toast.success("Trayecto completado");
+        } catch { toast.error("Error al completar ruta"); }
+    };
+
+    const getInitials = (name?: string) => {
+        if (!name) return 'DR';
+        return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+    };
+
+    const rutaActiva = rutas.find(r => r.estado === 'EN_CURSO');
+    const rutasPendientes = rutas.filter(r => r.estado === 'PLANIFICADA');
+    const kmTotalesHoy = rutasCompletadas.reduce((acc, r) => acc + (r.distanciaEstimadaKm || 0), 0);
 
     if (loading && !error) return (
         <BackgroundMeteors>
-            <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                minHeight: '100vh',
-                padding: '2rem',
-                textAlign: 'center'
-            }}>
-                <div style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>Cargando Panel Conductor...</div>
-                <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>Conectando a {API_URL}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '1rem' }}>
+                <div style={{ width: '44px', height: '44px', border: '3px solid rgba(59,246,59,0.1)', borderTop: '3px solid #3bf63b', borderRadius: '50%', animation: 'spin 0.9s linear infinite' }} />
+                <p style={{ color: '#6b7280', fontSize: '0.85rem', margin: 0 }}>Conectando con EcoFleet...</p>
             </div>
         </BackgroundMeteors>
     );
 
     if (error) return (
         <BackgroundMeteors>
-            <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                minHeight: '100vh',
-                padding: '2rem',
-                textAlign: 'center'
-            }}>
-                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚠️</div>
-                <div style={{ fontSize: '1.2rem', marginBottom: '0.5rem', color: '#ef4444' }}>Error de Conexión</div>
-                <div style={{ fontSize: '0.9rem', color: '#9ca3af', marginBottom: '1rem' }}>{error}</div>
-                <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '2rem', fontFamily: 'monospace' }}>
-                    Intentando conectar a:<br />
-                    {API_URL}/api/rutas
-                </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '2rem', textAlign: 'center', gap: '1rem' }}>
+                <div style={{ fontSize: '2.5rem' }}>📡</div>
+                <h2 style={{ fontSize: '1.1rem', color: '#ef4444', margin: 0 }}>Sin conexión</h2>
+                <p style={{ color: '#6b7280', fontSize: '0.85rem', margin: 0 }}>{error}</p>
                 <button
-                    onClick={() => {
-                        setLoading(true);
-                        setError(null);
-                        cargarRutas();
-                    }}
-                    style={{
-                        padding: '1rem 2rem',
-                        background: 'var(--accent)',
-                        color: '#000',
-                        border: 'none',
-                        borderRadius: '8px',
-                        fontSize: '1rem',
-                        fontWeight: 'bold',
-                        cursor: 'pointer'
-                    }}
+                    onClick={() => { setLoading(true); setError(null); cargarRutas(); }}
+                    style={{ padding: '0.875rem 2rem', background: 'linear-gradient(135deg, #3bf63b, #22c55e)', color: '#000', border: 'none', borderRadius: '12px', fontWeight: '800', fontSize: '0.9rem', cursor: 'pointer', marginTop: '0.5rem' }}
                 >
-                    🔄 Reintentar Conexión
+                    Reintentar
                 </button>
             </div>
         </BackgroundMeteors>
     );
 
-    const rutaActiva = rutas.find(r => r.estado === 'EN_CURSO');
-    const rutasPendientes = rutas.filter(r => r.estado === 'PLANIFICADA');
-
     return (
         <BackgroundMeteors>
-            <main style={{ minHeight: '100vh', width: '100%', overflowY: 'auto', position: 'relative' }}>
-                <div className={styles.container} style={{ padding: '0.5rem 1rem 2rem 1rem', maxWidth: '100%' }}>
+            <main style={{ minHeight: '100vh', width: '100%', display: 'flex', flexDirection: 'column', position: 'relative', paddingBottom: '72px' }}>
 
-                    {/* Header con Logo */}
-                    <header className={styles.header} style={{
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '2rem',
-                        paddingBottom: '1.5rem',
-                        borderBottom: '1px solid rgba(255,255,255,0.05)'
-                    }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                            <div style={{
-                                width: '45px',
-                                height: '45px',
-                                background: 'linear-gradient(135deg, var(--accent), #3bf63b)',
-                                borderRadius: '12px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                boxShadow: '0 8px 16px rgba(59, 246, 59, 0.2)'
-                            }}>
-                                <span style={{ color: '#000', fontWeight: '900', fontSize: '1.2rem' }}>CC</span>
-                            </div>
-                            <div className={styles.title}>
-                                <h1 style={{ fontSize: '1.4rem', margin: 0, letterSpacing: '-0.5px' }}>EcoFleet <span style={{ color: '#fff', opacity: 0.5, fontSize: '0.8rem', fontWeight: '400' }}>Mobile</span></h1>
-                                <p style={{ fontSize: '0.7rem', color: '#6b7280', margin: 0, textTransform: 'uppercase', letterSpacing: '1px' }}>Driver Edition</p>
-                            </div>
+                {/* STATUS BAR */}
+                <div style={{ background: 'rgba(5,5,10,0.9)', padding: '0.35rem 1.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.6rem', color: '#6b7280', backdropFilter: 'blur(8px)' }}>
+                    <span style={{ fontFamily: 'monospace' }}>
+                        {new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <span style={{ color: isOnline ? '#3bf63b' : '#6b7280', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />
+                        {isOnline ? 'EN LÍNEA' : 'INACTIVO'}
+                    </span>
+                </div>
+
+                {/* HEADER */}
+                <header style={{
+                    padding: '0.9rem 1.2rem',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    background: 'rgba(8,8,14,0.85)',
+                    backdropFilter: 'blur(24px)',
+                    borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 20
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <div style={{ width: '38px', height: '38px', borderRadius: '11px', background: 'linear-gradient(135deg, #3bf63b, #22c55e)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', color: '#000', fontSize: '0.9rem', boxShadow: '0 4px 16px rgba(59,246,59,0.35)', flexShrink: 0 }}>
+                            CC
                         </div>
-                        <div style={{ textAlign: 'right' }}>
-                            <div style={{ width: '40px', height: '40px', borderRadius: '50%', border: '2px solid var(--accent)', padding: '2px' }}>
-                                <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 'bold' }}>JS</div>
-                            </div>
+                        <div>
+                            <h1 style={{ fontSize: '1rem', fontWeight: '800', margin: 0, lineHeight: 1.2, color: '#fff' }}>
+                                Hola, {driverUser?.nombre?.split(' ')[0] || 'Conductor'}
+                            </h1>
+                            <p style={{ fontSize: '0.6rem', color: '#4b5563', margin: 0, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                                EcoFleet Driver
+                            </p>
                         </div>
-                    </header>
-
-                    {/* RUTA ACTIVA SECTION */}
-                    <div style={{ marginBottom: '2.5rem' }}>
-                        <h3 style={{ fontSize: '0.8rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '1rem', fontWeight: '700' }}>Trayecto en Curso</h3>
-                        {rutaActiva ? (
-                            <div className={styles.card} style={{
-                                borderLeft: '6px solid #3bf63b',
-                                background: 'linear-gradient(145deg, rgba(30,30,40,0.95), rgba(20,20,25,0.95))',
-                                padding: '1.5rem',
-                                boxShadow: '0 20px 40px -15px rgba(0,0,0,0.5)'
-                            }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#3bf63b', animation: 'pulse 1.5s infinite' }}></div>
-                                        <span style={{ fontSize: '0.7rem', color: '#3bf63b', fontWeight: '800' }}>RASTREO GPS ACTIVO</span>
-                                    </div>
-                                    <span style={{ fontSize: '0.65rem', color: '#4b5563', fontFamily: 'monospace' }}>#{rutaActiva.id?.slice(-6).toUpperCase()}</span>
-                                </div>
-
-                                <div style={{ marginBottom: '1.5rem' }}>
-                                    <h2 style={{
-                                        fontSize: '1.3rem',
-                                        fontWeight: '900',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '0.8rem',
-                                        overflow: 'hidden'
-                                    }}>
-                                        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', flex: 1 }}>{rutaActiva.origen}</span>
-                                        <span style={{ color: 'var(--accent)', opacity: 0.5, flexShrink: 0 }}>➝</span>
-                                        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', flex: 1 }}>{rutaActiva.destino}</span>
-                                    </h2>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
-                                        <svg width="14" height="14" fill="none" stroke="#6b7280" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-                                        <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>Vehículo: <span style={{ color: 'var(--accent)', fontWeight: '700' }}>{rutaActiva.vehiculoId?.length > 10 ? `...${rutaActiva.vehiculoId.slice(-6)}` : rutaActiva.vehiculoId}</span></span>
-                                    </div>
-                                </div>
-
-                                {/* Telemetría rápida para conductor */}
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
-                                    <div style={{ padding: '0.8rem', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.03)' }}>
-                                        <span style={{ display: 'block', fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Distancia</span>
-                                        <span style={{ fontSize: '1.1rem', fontWeight: '800' }}>{rutaActiva.distanciaEstimadaKm} <span style={{ fontSize: '0.7rem', color: '#4b5563' }}>KM</span></span>
-                                    </div>
-                                    <div style={{ padding: '0.8rem', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.03)' }}>
-                                        <span style={{ display: 'block', fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Vel. Media</span>
-                                        <span style={{ fontSize: '1.1rem', fontWeight: '800' }}>85 <span style={{ fontSize: '0.7rem', color: '#4b5563' }}>KM/H</span></span>
-                                    </div>
-                                </div>
-
-                                <button
-                                    onClick={() => toggleRuta(rutaActiva)}
-                                    className={styles.submitButton}
-                                    style={{
-                                        background: 'rgba(239, 68, 68, 0.1)',
-                                        color: '#ef4444',
-                                        border: '1px solid #ef4444',
-                                        height: '56px',
-                                        fontSize: '0.9rem',
-                                        letterSpacing: '1px',
-                                        boxShadow: 'none'
-                                    }}
-                                >
-                                    FINALIZAR TRAYECTO
-                                </button>
-                            </div>
-                        ) : (
-                            <div className={styles.card} style={{ textAlign: 'center', padding: '3rem 2rem', background: 'rgba(255,255,255,0.02)', border: '2px dashed rgba(255,255,255,0.05)' }}>
-                                <div style={{ opacity: 0.3, marginBottom: '1rem' }}>
-                                    <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ margin: '0 auto' }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
-                                </div>
-                                <p style={{ color: '#4b5563', fontSize: '0.9rem' }}>Esperando asignación de ruta...</p>
-                                <p style={{ color: '#374151', fontSize: '0.75rem', marginTop: '0.5rem' }}>Mantén la app abierta para recibir actualizaciones.</p>
-                            </div>
-                        )}
                     </div>
 
-                    {/* PENDING ROUTES SECTION */}
-                    {!rutaActiva && rutasPendientes.length > 0 && (
-                        <div style={{ marginBottom: '2.5rem' }}>
-                            <h3 style={{ fontSize: '0.8rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '1rem', fontWeight: '700' }}>Próximos Servicios</h3>
-                            <div style={{ display: 'grid', gap: '1rem' }}>
-                                {rutasPendientes.map(r => (
-                                    <div key={r.id} className={styles.card} style={{
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        <button
+                            onClick={() => setIsOnline(!isOnline)}
+                            style={{
+                                padding: '0.3rem 0.75rem',
+                                borderRadius: '99px',
+                                border: `1px solid ${isOnline ? 'rgba(59,246,59,0.4)' : 'rgba(107,114,128,0.3)'}`,
+                                background: isOnline ? 'rgba(59,246,59,0.1)' : 'rgba(255,255,255,0.03)',
+                                color: isOnline ? '#3bf63b' : '#6b7280',
+                                fontSize: '0.6rem',
+                                fontWeight: '800',
+                                cursor: 'pointer',
+                                letterSpacing: '0.5px',
+                                transition: 'all 0.25s ease'
+                            }}
+                        >
+                            {isOnline ? 'ACTIVO' : 'INACTIVO'}
+                        </button>
+                        <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: `2px solid ${isOnline ? 'rgba(59,246,59,0.5)' : 'rgba(107,114,128,0.3)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: '900', color: '#3bf63b', flexShrink: 0, transition: 'border-color 0.25s ease' }}>
+                            {getInitials(driverUser?.nombre)}
+                        </div>
+                    </div>
+                </header>
+
+                {/* SCROLLABLE CONTENT */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 1rem 1.5rem' }}>
+
+                    {/* ─── TAB: INICIO ─── */}
+                    {activeTab === 'inicio' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.4rem' }}>
+
+                            {/* STATS STRIP */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.7rem' }}>
+                                {[
+                                    { label: 'Completadas', value: rutasCompletadas.length, color: '#3bf63b' },
+                                    { label: 'KM hoy', value: kmTotalesHoy > 0 ? `${kmTotalesHoy.toFixed(0)}` : '0', color: '#60a5fa' },
+                                    { label: 'Pendientes', value: rutasPendientes.length, color: '#f59e0b' },
+                                ].map((s, i) => (
+                                    <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '14px', padding: '0.9rem 0.6rem', textAlign: 'center' }}>
+                                        <div style={{ fontSize: '1.6rem', fontWeight: '900', color: s.color, lineHeight: 1 }}>{s.value}</div>
+                                        <div style={{ fontSize: '0.55rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '0.3rem' }}>{s.label}</div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* RUTA ACTIVA */}
+                            <div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                    <span style={{ fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '2px', fontWeight: '700' }}>Trayecto Activo</span>
+                                    {rutaActiva && (
+                                        <span style={{ fontSize: '0.7rem', color: '#3bf63b', fontFamily: 'monospace', fontWeight: '800', background: 'rgba(59,246,59,0.08)', padding: '0.2rem 0.6rem', borderRadius: '99px', border: '1px solid rgba(59,246,59,0.2)' }}>
+                                            ⏱ {formatElapsed(elapsedSeconds)}
+                                        </span>
+                                    )}
+                                </div>
+
+                                {rutaActiva ? (
+                                    <div style={{
+                                        background: 'linear-gradient(150deg, rgba(18,22,30,0.98) 0%, rgba(12,15,20,0.98) 100%)',
+                                        border: '1px solid rgba(59,246,59,0.15)',
+                                        borderLeft: '4px solid #3bf63b',
+                                        borderRadius: '18px',
                                         padding: '1.2rem',
-                                        background: 'rgba(255,255,255,0.03)',
-                                        border: '1px solid rgba(255,255,255,0.05)'
+                                        boxShadow: '0 12px 40px -12px rgba(59,246,59,0.12), inset 0 1px 0 rgba(255,255,255,0.04)'
                                     }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <div style={{ flex: 1, overflow: 'hidden', marginRight: '1rem' }}>
-                                                <div style={{ fontSize: '0.65rem', color: '#4b5563', marginBottom: '0.4rem' }}>{r.fecha} • RUTA</div>
-                                                <h4 style={{
-                                                    fontSize: '0.95rem',
-                                                    fontWeight: '700',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '0.5rem',
-                                                    overflow: 'hidden'
-                                                }}>
-                                                    <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{r.origen}</span>
-                                                    <span style={{ opacity: 0.2 }}>➝</span>
-                                                    <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{r.destino}</span>
-                                                </h4>
+                                        {/* Top badges */}
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.1rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(59,246,59,0.1)', padding: '0.3rem 0.75rem', borderRadius: '99px', border: '1px solid rgba(59,246,59,0.25)' }}>
+                                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#3bf63b', boxShadow: '0 0 8px rgba(59,246,59,0.8)', display: 'inline-block', animation: 'gps-pulse 1.5s infinite' }} />
+                                                <span style={{ fontSize: '0.58rem', color: '#3bf63b', fontWeight: '900', letterSpacing: '0.5px' }}>GPS ACTIVO</span>
                                             </div>
+                                            <span style={{ fontSize: '0.58rem', color: '#374151', fontFamily: 'monospace' }}>
+                                                #{rutaActiva.id?.slice(-6).toUpperCase()}
+                                            </span>
+                                        </div>
+
+                                        {/* Route visual */}
+                                        <div style={{ display: 'flex', gap: '0.9rem', marginBottom: '1.1rem', alignItems: 'stretch' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '4px' }}>
+                                                <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#3bf63b', boxShadow: '0 0 10px rgba(59,246,59,0.7)', flexShrink: 0 }} />
+                                                <div style={{ width: '2px', flex: 1, background: 'linear-gradient(to bottom, #3bf63b55, #ef444455)', margin: '4px 0', minHeight: '20px' }} />
+                                                <div style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#ef4444', boxShadow: '0 0 10px rgba(239,68,68,0.5)', flexShrink: 0 }} />
+                                            </div>
+                                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', overflow: 'hidden', gap: '12px' }}>
+                                                <div>
+                                                    <p style={{ fontSize: '0.6rem', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 3px' }}>Origen</p>
+                                                    <p style={{ fontSize: '1rem', fontWeight: '800', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#fff' }}>{rutaActiva.origen}</p>
+                                                </div>
+                                                <div>
+                                                    <p style={{ fontSize: '0.6rem', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 3px' }}>Destino</p>
+                                                    <p style={{ fontSize: '1rem', fontWeight: '800', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#ef4444' }}>{rutaActiva.destino}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Mini stats */}
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem', marginBottom: '1.1rem' }}>
+                                            {[
+                                                { label: 'Distancia', value: `${rutaActiva.distanciaEstimadaKm}`, unit: 'km' },
+                                                { label: 'En curso', value: formatElapsed(elapsedSeconds), unit: '' },
+                                                { label: 'Vehículo', value: rutaActiva.vehiculoId?.slice(-5)?.toUpperCase() || '—', unit: '' },
+                                            ].map((s, i) => (
+                                                <div key={i} style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '10px', padding: '0.55rem', textAlign: 'center', border: '1px solid rgba(255,255,255,0.04)' }}>
+                                                    <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#e5e7eb', lineHeight: 1.2 }}>
+                                                        {s.value}{s.unit && <span style={{ fontSize: '0.55rem', color: '#6b7280', marginLeft: '2px' }}>{s.unit}</span>}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.5rem', color: '#4b5563', textTransform: 'uppercase', marginTop: '3px', letterSpacing: '0.3px' }}>{s.label}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {/* Actions */}
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                                             <button
-                                                onClick={() => toggleRuta(r)}
-                                                className={styles.submitButton}
-                                                style={{
-                                                    width: 'auto',
-                                                    padding: '0.6rem 1.2rem',
-                                                    fontSize: '0.75rem',
-                                                    background: 'var(--accent)',
-                                                    color: '#000',
-                                                    boxShadow: '0 4px 12px rgba(59, 246, 59, 0.2)'
-                                                }}
+                                                onClick={() => setActiveTab('chat')}
+                                                style={{ padding: '0.875rem', background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', borderRadius: '12px', color: '#60a5fa', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'all 0.2s' }}
                                             >
-                                                INICIAR
+                                                💬 Chat
+                                            </button>
+                                            <button
+                                                onClick={() => completarRuta(rutaActiva)}
+                                                style={{ padding: '0.875rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '12px', color: '#ef4444', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.2s' }}
+                                            >
+                                                ✓ Completar
                                             </button>
                                         </div>
                                     </div>
-                                ))}
+                                ) : (
+                                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '2px dashed rgba(255,255,255,0.06)', borderRadius: '18px', padding: '2.5rem 2rem', textAlign: 'center' }}>
+                                        <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem', filter: 'grayscale(1)', opacity: 0.35 }}>🛣️</div>
+                                        <p style={{ color: '#4b5563', fontSize: '0.9rem', margin: '0 0 0.3rem', fontWeight: '600' }}>Sin trayecto activo</p>
+                                        <p style={{ color: '#374151', fontSize: '0.75rem', margin: 0 }}>Iniciá un servicio desde "Próximos"</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* PRÓXIMOS SERVICIOS */}
+                            {rutasPendientes.length > 0 && (
+                                <div>
+                                    <span style={{ fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '2px', fontWeight: '700' }}>
+                                        Próximos Servicios ({rutasPendientes.length})
+                                    </span>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.75rem' }}>
+                                        {rutasPendientes.map(r => (
+                                            <div key={r.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '14px', padding: '1rem', transition: 'border-color 0.2s' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.8rem' }}>
+                                                    <div style={{ flex: 1, overflow: 'hidden' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '0.4rem' }}>
+                                                            <span style={{ fontSize: '0.58rem', color: '#f59e0b', fontWeight: '800', textTransform: 'uppercase' }}>
+                                                                {r.fecha
+                                                                    ? new Date(r.fecha).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                                                                    : 'Sin fecha'}
+                                                            </span>
+                                                            <span style={{ fontSize: '0.55rem', color: '#4b5563' }}>• {r.distanciaEstimadaKm} km</span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', overflow: 'hidden' }}>
+                                                            <span style={{ fontSize: '0.85rem', fontWeight: '700', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '42%' }}>{r.origen}</span>
+                                                            <span style={{ color: '#374151', fontSize: '0.8rem', flexShrink: 0 }}>→</span>
+                                                            <span style={{ fontSize: '0.85rem', fontWeight: '700', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '42%' }}>{r.destino}</span>
+                                                        </div>
+                                                    </div>
+                                                    {!rutaActiva && (
+                                                        <button
+                                                            onClick={() => toggleRuta(r)}
+                                                            style={{ flexShrink: 0, padding: '0.6rem 1.1rem', background: 'linear-gradient(135deg, #3bf63b, #22c55e)', border: 'none', borderRadius: '10px', color: '#000', fontWeight: '900', fontSize: '0.72rem', cursor: 'pointer', boxShadow: '0 4px 14px rgba(59,246,59,0.3)', letterSpacing: '0.5px' }}
+                                                        >
+                                                            INICIAR
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* SOS */}
+                            <button
+                                onClick={() => toast.error("SOS enviado al administrador — te contactaremos en breve", { duration: 6000 })}
+                                style={{ width: '100%', padding: '1rem', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.18)', borderRadius: '14px', color: '#ef4444', fontWeight: '800', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', letterSpacing: '0.8px', transition: 'all 0.2s' }}
+                            >
+                                🆘 EMERGENCIA SOS
+                            </button>
+                        </div>
+                    )}
+
+                    {/* ─── TAB: HISTORIAL ─── */}
+                    {activeTab === 'historial' && (
+                        <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                <span style={{ fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '2px', fontWeight: '700' }}>Historial de Rutas</span>
+                                <span style={{ fontSize: '0.65rem', color: '#3bf63b', fontWeight: '700' }}>{rutasCompletadas.length} completadas</span>
+                            </div>
+
+                            {rutasCompletadas.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
+                                    <div style={{ fontSize: '2.5rem', opacity: 0.25, marginBottom: '0.75rem' }}>📋</div>
+                                    <p style={{ color: '#4b5563', fontSize: '0.9rem', margin: 0 }}>Sin rutas completadas aún</p>
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                    {rutasCompletadas.map(r => (
+                                        <div key={r.id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '14px', padding: '1rem', borderLeft: '3px solid rgba(59,246,59,0.4)' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                                                <span style={{ fontSize: '0.58rem', color: '#3bf63b', fontWeight: '800', background: 'rgba(59,246,59,0.1)', padding: '0.2rem 0.5rem', borderRadius: '99px' }}>✓ COMPLETADA</span>
+                                                <span style={{ fontSize: '0.55rem', color: '#374151', fontFamily: 'monospace' }}>#{r.id?.slice(-6).toUpperCase()}</span>
+                                            </div>
+                                            <p style={{ fontSize: '0.85rem', fontWeight: '700', margin: '0 0 0.3rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {r.origen} <span style={{ color: '#4b5563' }}>→</span> {r.destino}
+                                            </p>
+                                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                                <span style={{ fontSize: '0.65rem', color: '#6b7280' }}>{r.distanciaEstimadaKm} km</span>
+                                                {r.fecha && <span style={{ fontSize: '0.65rem', color: '#6b7280' }}>{new Date(r.fecha).toLocaleDateString('es-AR')}</span>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ─── TAB: CHAT ─── */}
+                    {activeTab === 'chat' && (
+                        <div>
+                            <span style={{ fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '2px', fontWeight: '700' }}>
+                                Comunicación Directa
+                            </span>
+                            <div style={{ marginTop: '0.75rem' }}>
+                                <ChatRuta
+                                    rutaId={rutaActiva?.id || (rutasPendientes.length > 0 ? rutasPendientes[0].id : "testing_room")}
+                                    rol="CONDUCTOR"
+                                />
                             </div>
                         </div>
                     )}
 
-                    {/* CHAT SECTION */}
-                    <div style={{ marginTop: '2.5rem' }}>
-                        <h3 style={{ fontSize: '0.8rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '1rem', fontWeight: '700' }}>Comunicación Directa</h3>
-                        <ChatRuta rutaId={rutaActiva?.id || (rutasPendientes.length > 0 ? rutasPendientes[0].id : "testing_room")} rol="CONDUCTOR" />
-                    </div>
+                    {/* ─── TAB: PERFIL ─── */}
+                    {activeTab === 'perfil' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+                            {/* Avatar */}
+                            <div style={{ textAlign: 'center', paddingTop: '0.5rem' }}>
+                                <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'linear-gradient(135deg, rgba(59,246,59,0.15), rgba(34,197,94,0.08))', border: `3px solid ${isOnline ? 'rgba(59,246,59,0.5)' : 'rgba(107,114,128,0.3)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', fontWeight: '900', color: '#3bf63b', margin: '0 auto 0.75rem', transition: 'border-color 0.3s' }}>
+                                    {getInitials(driverUser?.nombre)}
+                                </div>
+                                <h2 style={{ fontSize: '1.1rem', fontWeight: '800', margin: '0 0 0.2rem', color: '#fff' }}>
+                                    {driverUser?.nombre || 'Conductor'}
+                                </h2>
+                                <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0 0 0.4rem' }}>
+                                    {driverUser?.email || ''}
+                                </p>
+                                <span style={{ fontSize: '0.6rem', color: isOnline ? '#3bf63b' : '#6b7280', fontWeight: '700', background: isOnline ? 'rgba(59,246,59,0.1)' : 'rgba(255,255,255,0.03)', padding: '0.2rem 0.7rem', borderRadius: '99px', border: `1px solid ${isOnline ? 'rgba(59,246,59,0.2)' : 'rgba(107,114,128,0.2)'}` }}>
+                                    {isOnline ? '● EN LÍNEA' : '○ INACTIVO'}
+                                </span>
+                            </div>
 
-                    <footer style={{ marginTop: '4rem', textAlign: 'center', paddingBottom: '2rem' }}>
-                        <div style={{ fontSize: '0.65rem', color: '#374151', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '0.5rem' }}>Powered by EcoFleet Tech</div>
-                        <div style={{ width: '20px', height: '2px', background: 'var(--accent)', margin: '0 auto', opacity: 0.3 }}></div>
-                    </footer>
+                            {/* Stats */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                {[
+                                    { label: 'Completadas', value: rutasCompletadas.length, color: '#3bf63b' },
+                                    { label: 'KM Totales', value: `${rutasCompletadas.reduce((acc, r) => acc + r.distanciaEstimadaKm, 0).toFixed(0)}`, color: '#60a5fa' },
+                                    { label: 'En progreso', value: rutas.length, color: '#f59e0b' },
+                                    { label: 'Tiempo activo', value: elapsedSeconds > 0 ? formatElapsed(elapsedSeconds) : '—', color: '#a78bfa' },
+                                ].map((s, i) => (
+                                    <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '14px', padding: '1rem', textAlign: 'center' }}>
+                                        <div style={{ fontSize: '1.4rem', fontWeight: '900', color: s.color, lineHeight: 1.1 }}>{s.value}</div>
+                                        <div style={{ fontSize: '0.58rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.3px', marginTop: '0.3rem' }}>{s.label}</div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Acerca de */}
+                            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '14px', padding: '1rem' }}>
+                                <h3 style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 0.75rem', fontWeight: '700' }}>Información</h3>
+                                {[
+                                    { label: 'Nombre', value: driverUser?.nombre || '—' },
+                                    { label: 'Email', value: driverUser?.email || '—' },
+                                    { label: 'Rol', value: driverUser?.rol || 'CONDUCTOR' },
+                                    { label: 'ID', value: `#${driverUser?.id?.slice(-8).toUpperCase() || '—'}` },
+                                ].map((row, i) => (
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 0', borderBottom: i < 3 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+                                        <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>{row.label}</span>
+                                        <span style={{ fontSize: '0.8rem', fontWeight: '600', color: '#e5e7eb', maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{row.value}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Logout */}
+                            <button
+                                onClick={() => {
+                                    localStorage.removeItem("user");
+                                    localStorage.removeItem("token");
+                                    router.push("/conductor/login");
+                                }}
+                                style={{ width: '100%', padding: '1rem', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.18)', borderRadius: '14px', color: '#ef4444', fontWeight: '700', fontSize: '0.875rem', cursor: 'pointer', letterSpacing: '0.3px' }}
+                            >
+                                Cerrar Sesión
+                            </button>
+                        </div>
+                    )}
                 </div>
+
+                {/* BOTTOM NAVIGATION */}
+                <nav style={{
+                    position: 'fixed',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    background: 'rgba(6,6,12,0.96)',
+                    backdropFilter: 'blur(24px)',
+                    borderTop: '1px solid rgba(255,255,255,0.05)',
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    padding: '0.4rem 0 0.6rem',
+                    zIndex: 50
+                }}>
+                    {[
+                        { id: 'inicio', label: 'Inicio', icon: (active: boolean) => (
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? '#3bf63b' : 'none'} stroke={active ? '#3bf63b' : '#4b5563'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+                            </svg>
+                        )},
+                        { id: 'historial', label: 'Historial', icon: (active: boolean) => (
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? '#3bf63b' : '#4b5563'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+                            </svg>
+                        )},
+                        { id: 'chat', label: 'Chat', icon: (active: boolean) => (
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? 'rgba(59,246,59,0.15)' : 'none'} stroke={active ? '#3bf63b' : '#4b5563'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                            </svg>
+                        )},
+                        { id: 'perfil', label: 'Perfil', icon: (active: boolean) => (
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? '#3bf63b' : '#4b5563'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                            </svg>
+                        )},
+                    ].map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id as any)}
+                            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', padding: '0.4rem', background: 'none', border: 'none', cursor: 'pointer', color: activeTab === tab.id ? '#3bf63b' : '#4b5563', transition: 'color 0.2s', WebkitTapHighlightColor: 'transparent' }}
+                        >
+                            {tab.icon(activeTab === tab.id)}
+                            <span style={{ fontSize: '0.55rem', fontWeight: activeTab === tab.id ? '800' : '500', letterSpacing: '0.3px', transition: 'color 0.2s' }}>
+                                {tab.label}
+                            </span>
+                            {activeTab === tab.id && (
+                                <span style={{ width: '18px', height: '2px', background: '#3bf63b', borderRadius: '1px', marginTop: '1px' }} />
+                            )}
+                        </button>
+                    ))}
+                </nav>
             </main>
+
+            <style>{`
+                @keyframes spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+                @keyframes gps-pulse {
+                    0%, 100% { box-shadow: 0 0 6px rgba(59,246,59,0.8); opacity: 1; }
+                    50% { box-shadow: 0 0 14px rgba(59,246,59,0.4); opacity: 0.6; }
+                }
+                @keyframes pulse {
+                    0%, 100% { transform: scale(0.95); opacity: 1; }
+                    50% { transform: scale(1.1); opacity: 0.7; }
+                }
+            `}</style>
         </BackgroundMeteors>
     );
 }

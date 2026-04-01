@@ -38,6 +38,8 @@ interface Ruta {
   distanciaEstimadaKm: number;
   estado: string;
   vehiculoId: string;
+  conductorId?: string;
+  conductorNombre?: string;
   fecha: string;
   latitudOrigen?: number;
   longitudOrigen?: number;
@@ -56,6 +58,12 @@ interface Repostaje {
   costeTotal: number;
   kilometrajeActual: number;
   vehiculoId: string;
+}
+
+interface Conductor {
+  id: string;
+  nombre: string;
+  email: string;
 }
 
 // Dynamic import para el mapa de tracking global (evitar SSR)
@@ -84,6 +92,7 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<'flota' | 'nuevo' | 'rutas' | 'estadisticas' | 'tracking'>('flota');
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
   const [rutas, setRutas] = useState<Ruta[]>([]);
+  const [conductores, setConductores] = useState<Conductor[]>([]);
   const [repostajes, setRepostajes] = useState<Repostaje[]>([]);
   const [loading, setLoading] = useState(true);
   const [enviandoReporte, setEnviandoReporte] = useState(false);
@@ -268,16 +277,17 @@ export default function Dashboard() {
     marca: '', modelo: '', matricula: '', kilometraje: 0, combustibleActual: 50, activo: true
   });
   const [nuevaRuta, setNuevaRuta] = useState<Partial<Ruta>>({
-    origen: '', destino: '', distanciaEstimadaKm: 0, vehiculoId: '', fecha: new Date().toISOString().split('T')[0]
+    origen: '', destino: '', distanciaEstimadaKm: 0, vehiculoId: '', conductorId: '', conductorNombre: '', fecha: new Date().toISOString().split('T')[0]
   });
 
   const cargarDatos = useCallback(async () => {
     setLoading(true);
     try {
-      const [resVehiculos, resRutas, resRepostajes] = await Promise.all([
+      const [resVehiculos, resRutas, resRepostajes, resConductores] = await Promise.all([
         fetch(`${API_URL}/api/vehiculos`, { headers: getAuthHeaders() }),
         fetch(`${API_URL}/api/rutas`, { headers: getAuthHeaders() }),
-        fetch(`${API_URL}/api/repostajes`, { headers: getAuthHeaders() })
+        fetch(`${API_URL}/api/repostajes`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/conductores`, { headers: getAuthHeaders() })
       ]);
 
       if (resVehiculos.ok) {
@@ -295,6 +305,13 @@ export default function Dashboard() {
       if (resRepostajes.ok) {
         const dataRep = await resRepostajes.json();
         setRepostajes(dataRep);
+      }
+
+      if (resConductores.ok) {
+        const dataC = await resConductores.json();
+        setConductores(dataC);
+      } else if (resConductores.status === 403) {
+        setConductores([]);
       }
     } catch (err) {
       console.error("Error conectando con el Backend:", err);
@@ -348,6 +365,7 @@ export default function Dashboard() {
       toast.warning("⚠️ Debes asignar un vehículo a la ruta");
       return;
     }
+    const conductorSeleccionado = conductores.find(c => c.id === nuevaRuta.conductorId);
     const geocode = async (query: string) => {
       try {
         const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`);
@@ -385,6 +403,8 @@ export default function Dashboard() {
           body: JSON.stringify({
             ...nuevaRuta,
             estado: 'PLANIFICADA',
+            conductorId: conductorSeleccionado?.id || "",
+            conductorNombre: conductorSeleccionado?.nombre || "",
             latitudOrigen: originCoords.lat,
             longitudOrigen: originCoords.lng,
             latitudDestino: destCoords.lat,
@@ -397,7 +417,15 @@ export default function Dashboard() {
         if (!res.ok) throw new Error("Error al guardar la ruta en el servidor");
 
         cargarDatos();
-        setNuevaRuta({ origen: "", destino: "", distanciaEstimadaKm: 0, fecha: new Date().toISOString().split("T")[0], vehiculoId: "" });
+        setNuevaRuta({
+          origen: "",
+          destino: "",
+          distanciaEstimadaKm: 0,
+          fecha: new Date().toISOString().split("T")[0],
+          vehiculoId: "",
+          conductorId: "",
+          conductorNombre: ""
+        });
         return res.json();
       })(),
       {
@@ -739,6 +767,26 @@ export default function Dashboard() {
                       ))}
                     </select>
                   </div>
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Conductor Asignado</label>
+                    <select
+                      className={styles.select}
+                      value={nuevaRuta.conductorId || ""}
+                      onChange={e => {
+                        const conductor = conductores.find(c => c.id === e.target.value);
+                        setNuevaRuta({
+                          ...nuevaRuta,
+                          conductorId: e.target.value,
+                          conductorNombre: conductor?.nombre || ""
+                        });
+                      }}
+                    >
+                      <option value="">-- Sin asignar --</option>
+                      {conductores.map(c => (
+                        <option key={c.id} value={c.id}>{c.nombre} ({c.email})</option>
+                      ))}
+                    </select>
+                  </div>
                   <button type="submit" className={styles.submitButton}>Planificar Ruta</button>
                 </form>
               </div>
@@ -795,6 +843,11 @@ export default function Dashboard() {
                           <span className={styles.statValue}>
                             {r.vehiculoId?.length > 10 ? `...${r.vehiculoId.slice(-8)}` : r.vehiculoId}
                           </span>
+                        </div>
+
+                        <div className={styles.statRow}>
+                          <span className={styles.statLabel}>Conductor</span>
+                          <span className={styles.statValue}>{r.conductorNombre || "Sin asignar"}</span>
                         </div>
 
                         <div className={styles.statRow}>

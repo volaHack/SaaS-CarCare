@@ -20,6 +20,8 @@ interface Ruta {
     distanciaEstimadaKm: number;
     estado: string;
     vehiculoId: string;
+    conductorId?: string;
+    conductorNombre?: string;
     fecha: string;
     latitudOrigen: number;
     longitudOrigen: number;
@@ -68,6 +70,7 @@ function calcularProgreso(distanciaTotal?: number, distanciaRestante?: number): 
 const API_URL = typeof window !== 'undefined' && window.location.hostname === '10.0.2.2'
     ? ''
     : (process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production-54f9.up.railway.app");
+const DASHBOARD_ROUTE = "/dashboard";
 
 export default function RutaTracking() {
     const router = useRouter();
@@ -269,7 +272,7 @@ export default function RutaTracking() {
                     <span style={{ fontSize: '3rem' }}>🔍</span>
                     <span style={{ color: '#ef4444', fontSize: '1.2rem' }}>{error}</span>
                     <button
-                        onClick={() => router.push('/')}
+                        onClick={() => router.push(DASHBOARD_ROUTE)}
                         style={{
                             marginTop: '1rem',
                             padding: '0.75rem 1.5rem',
@@ -405,7 +408,7 @@ export default function RutaTracking() {
                         {/* Top bar: botón atrás + vehicle pill (mobile los ve en fila, desktop se distribuye) */}
                         <div className="ruta-header-topbar">
                             <button
-                                onClick={() => router.push("/")}
+                                onClick={() => router.push(DASHBOARD_ROUTE)}
                                 className={`${styles.navButton} ruta-back-btn`}
                                 style={{
                                     background: 'rgba(255,255,255,0.05)',
@@ -420,7 +423,9 @@ export default function RutaTracking() {
                             {/* Vehicle pill — visible en mobile junto al back btn */}
                             <div className="ruta-vehicle-mobile" style={{ display: 'none', alignItems: 'center', gap: '0.5rem' }}>
                                 <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#3bf63b' }}></div>
-                                <span style={{ fontWeight: '700', fontSize: '0.8rem', color: '#e2e8f0' }}>{ruta.vehiculoId?.slice(-10)}</span>
+                                <span style={{ fontWeight: '700', fontSize: '0.8rem', color: '#e2e8f0' }}>
+                                    {ruta.conductorNombre || ruta.vehiculoId?.slice(-10)}
+                                </span>
                             </div>
                         </div>
 
@@ -458,6 +463,9 @@ export default function RutaTracking() {
                                 )}
 
                                 <span style={{ color: '#4b5563', fontSize: '0.75rem' }}>{ruta.fecha?.slice(0, 10)}</span>
+                                <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>
+                                    {ruta.conductorNombre ? `Conductor: ${ruta.conductorNombre}` : 'Conductor sin asignar'}
+                                </span>
                             </div>
 
                             <h1 className="ruta-title-h1">
@@ -473,6 +481,11 @@ export default function RutaTracking() {
                             <div className="ruta-vehicle-pill">
                                 <div style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#3bf63b', flexShrink: 0 }}></div>
                                 <span style={{ fontWeight: '700', fontSize: '0.85rem' }}>{ruta.vehiculoId?.slice(-12)}</span>
+                            </div>
+                            <div className="ruta-vehicle-label" style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: '0.9rem', marginBottom: '0.3rem' }}>Conductor</div>
+                            <div className="ruta-vehicle-pill">
+                                <div style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#60a5fa', flexShrink: 0 }}></div>
+                                <span style={{ fontWeight: '700', fontSize: '0.85rem' }}>{ruta.conductorNombre || 'Sin asignar'}</span>
                             </div>
                         </div>
                     </header>
@@ -641,6 +654,20 @@ export default function RutaTracking() {
                                     
                                     return (
                                         <div style={{ display: 'grid', gap: '1rem' }}>
+                                            <div style={{ padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', border: '1px solid rgba(96, 165, 250, 0.18)' }}>
+                                                <span style={{ display: 'block', fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.4rem' }}>Conductor Asignado</span>
+                                                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
+                                                    <span style={{ fontSize: '1.15rem', fontWeight: '800', color: '#e2e8f0' }}>
+                                                        {ruta.conductorNombre || 'Sin asignar'}
+                                                    </span>
+                                                </div>
+                                                {ruta.conductorId && (
+                                                    <div style={{ fontSize: '0.65rem', color: '#4b5563', marginTop: '0.35rem' }}>
+                                                        ID: {ruta.conductorId.slice(-10)}
+                                                    </div>
+                                                )}
+                                            </div>
+
                                             {/* Velocidad Actual */}
                                             <div style={{ padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', border: `1px solid ${velocidadColor}20` }}>
                                                 <span style={{ display: 'block', fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.4rem' }}>Velocidad Actual</span>

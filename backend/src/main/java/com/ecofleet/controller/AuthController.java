@@ -412,8 +412,8 @@ public class AuthController {
             response.put("nombreEmpresa", conductor.getNombreEmpresa());
             response.put("role", "CONDUCTOR");
             response.put("empresaId", conductor.getEmpresaId());
-            // Token subject = empresaId para que el filtro multi-tenant funcione igual que antes
-            response.put("token", jwtUtil.generateToken(conductor.getEmpresaId(), "CONDUCTOR"));
+            // Token subject = empresaId (multi-tenant) + conductorId claim para filtrar rutas
+            response.put("token", jwtUtil.generateToken(conductor.getEmpresaId(), "CONDUCTOR", conductor.getId()));
 
             return ResponseEntity.ok(response);
 
@@ -480,7 +480,7 @@ public class AuthController {
             response.put("nombreEmpresa", conductor.getNombreEmpresa());
             response.put("role", "CONDUCTOR");
             response.put("empresaId", conductor.getEmpresaId());
-            response.put("token", jwtUtil.generateToken(conductor.getEmpresaId(), "CONDUCTOR"));
+            response.put("token", jwtUtil.generateToken(conductor.getEmpresaId(), "CONDUCTOR", conductor.getId()));
 
             return ResponseEntity.ok(response);
         } else {

@@ -7,6 +7,7 @@ import styles from "./AlertasPanel.module.css";
 
 export interface Alerta {
   id: string;
+  grupoKey?: string;
   tipo: "MANTENIMIENTO" | "RUTA_DETENIDA" | "RUTA_DESVIADA" | "GPS_PERDIDO";
   severidad: "CRITICAL" | "WARNING" | "INFO";
   titulo: string;
@@ -45,6 +46,45 @@ function tiempoAtras(timestamp: string): string {
   if (diff < 3600) return `Hace ${Math.floor(diff / 60)} min`;
   if (diff < 86400) return `Hace ${Math.floor(diff / 3600)}h`;
   return `Hace ${Math.floor(diff / 86400)}d`;
+}
+
+function formatearDuracionDesdeMinutos(minutosTotales: number): string {
+  const minutos = Math.max(1, Math.floor(minutosTotales));
+  const dias = Math.floor(minutos / 1440);
+  const horas = Math.floor((minutos % 1440) / 60);
+  const mins = minutos % 60;
+
+  if (dias > 0) return horas > 0 ? `${dias}d ${horas}h` : `${dias}d`;
+  if (horas > 0) return mins > 0 ? `${horas}h ${mins}min` : `${horas}h`;
+  return `${mins} min`;
+}
+
+function normalizarDescripcionTiempo(descripcion: string): string {
+  return descripcion.replace(/(\d+)\s*minutos?/gi, (_, mins: string) =>
+    formatearDuracionDesdeMinutos(Number(mins))
+  );
+}
+
+function deduplicarAlertas(alertas: Alerta[]): Alerta[] {
+  const ordenadas = [...alertas].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
+  const vistas = new Set<string>();
+  const resultado: Alerta[] = [];
+
+  for (const alerta of ordenadas) {
+    const clave = alerta.grupoKey?.trim()
+      ? `grupo:${alerta.grupoKey}`
+      : `${alerta.tipo}|${alerta.rutaId ?? ""}|${alerta.vehiculoId ?? ""}|${alerta.titulo.trim().toLowerCase()}`;
+    if (vistas.has(clave)) continue;
+    vistas.add(clave);
+    resultado.push({
+      ...alerta,
+      descripcion: normalizarDescripcionTiempo(alerta.descripcion),
+    });
+  }
+
+  return resultado;
 }
 
 // ─── Iconos SVG ──────────────────────────────────────────────────────────────
@@ -108,15 +148,25 @@ export default function AlertasPanel({ apiUrl, getAuthHeaders, onNavigate }: Pro
   const cargar = useCallback(async () => {
     try {
       const res = await fetch(`${apiUrl}/api/alertas`, { headers: getAuthHeaders() });
-      if (res.ok) setAlertas(await res.json());
+      if (res.ok) {
+        const data: Alerta[] = await res.json();
+        setAlertas(deduplicarAlertas(data));
+      }
     } catch { /* silent */ }
   }, [apiUrl, getAuthHeaders]);
 
   // Poll cada 30s
   useEffect(() => {
-    cargar();
-    const id = setInterval(cargar, 30000);
-    return () => clearInterval(id);
+    const primerCargaId = window.setTimeout(() => {
+      void cargar();
+    }, 0);
+    const id = window.setInterval(() => {
+      void cargar();
+    }, 30000);
+    return () => {
+      window.clearTimeout(primerCargaId);
+      window.clearInterval(id);
+    };
   }, [cargar]);
 
   // Marcar una como leída

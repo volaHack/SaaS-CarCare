@@ -42,6 +42,10 @@ public class JwtFilter extends OncePerRequestFilter {
             if (jwtUtil.isValid(token)) {
                 request.setAttribute("userId", jwtUtil.extractTenantId(token));
                 request.setAttribute("userRole", jwtUtil.extractRole(token));
+                String conductorId = jwtUtil.extractConductorId(token);
+                if (conductorId != null) {
+                    request.setAttribute("conductorId", conductorId);
+                }
             }
         }
 

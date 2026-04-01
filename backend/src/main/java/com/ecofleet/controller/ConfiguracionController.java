@@ -51,8 +51,12 @@ public class ConfiguracionController {
                 });
 
         if (body.containsKey("emailNotificaciones")) {
-            String val = body.get("emailNotificaciones").trim();
-            cfg.setEmailNotificaciones(val.isEmpty() ? null : val);
+            try {
+                String normalizado = emailService.normalizarDestinatarios(body.get("emailNotificaciones"));
+                cfg.setEmailNotificaciones(normalizado.isEmpty() ? null : normalizado);
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            }
         }
 
         configEmailRepo.save(cfg);
@@ -100,7 +104,7 @@ public class ConfiguracionController {
             return ResponseEntity.ok(Map.of("mensaje", "Email de prueba enviado a " + destino));
         } catch (Exception e) {
             return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "No se pudo enviar el email. Intenta de nuevo mas tarde."));
+                    .body(Map.of("error", e.getMessage() != null ? e.getMessage() : "No se pudo enviar el email. Intenta de nuevo mas tarde."));
         }
     }
 }

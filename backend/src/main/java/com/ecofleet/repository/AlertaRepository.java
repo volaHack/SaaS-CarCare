@@ -18,11 +18,9 @@ public interface AlertaRepository extends MongoRepository<Alerta, String> {
     // Todas las alertas activas no resueltas (para el scheduler)
     List<Alerta> findByEmpresaIdAndResueltaFalse(String empresaId);
 
-    // Comprobar si ya existe una alerta activa no resuelta para esta condición
-    boolean existsByGrupoKeyAndLeidaFalseAndResueltaFalse(String grupoKey);
-
-    // Para marcar como resuelta cuando la condición desaparece
     Optional<Alerta> findByGrupoKeyAndResueltaFalse(String grupoKey);
+
+    List<Alerta> findByGrupoKeyAndResueltaFalseOrderByTimestampDesc(String grupoKey);
 
     // Para marcar todas las no leídas de una empresa como leídas
     List<Alerta> findByEmpresaIdAndLeidaFalseAndResueltaFalse(String empresaId);

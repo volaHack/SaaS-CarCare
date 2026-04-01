@@ -18,6 +18,8 @@ public class Ruta {
     private String estado; // "PLANIFICADA", "EN_CURSO", "DETENIDO", "COMPLETADA"
     
     private String vehiculoId; // Vehiculo asignado
+    private String conductorId;     // Conductor asignado (nullable)
+    private String conductorNombre; // Nombre desnormalizado para display
     private String fecha;
 
     // Coordenadas para el Tracking
@@ -59,7 +61,13 @@ public class Ruta {
     
     public String getVehiculoId() { return vehiculoId; }
     public void setVehiculoId(String vehiculoId) { this.vehiculoId = vehiculoId; }
-    
+
+    public String getConductorId() { return conductorId; }
+    public void setConductorId(String conductorId) { this.conductorId = conductorId; }
+
+    public String getConductorNombre() { return conductorNombre; }
+    public void setConductorNombre(String conductorNombre) { this.conductorNombre = conductorNombre; }
+
     public String getFecha() { return fecha; }
     public void setFecha(String fecha) { this.fecha = fecha; }
     

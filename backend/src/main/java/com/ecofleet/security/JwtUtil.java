@@ -23,7 +23,7 @@ public class JwtUtil {
     }
 
     /**
-     * Genera un token JWT.
+     * Genera un token JWT para administradores.
      *
      * @param tenantId El ID que se usa para filtrar datos multi-tenant.
      *                 Para ADMIN: su propio ID.
@@ -34,6 +34,24 @@ public class JwtUtil {
         return Jwts.builder()
                 .subject(tenantId)
                 .claim("role", role)
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + expiration))
+                .signWith(getKey())
+                .compact();
+    }
+
+    /**
+     * Genera un token JWT para conductores incluyendo su propio ID.
+     *
+     * @param tenantId    El empresaId — para mantener multi-tenant igual que siempre.
+     * @param role        "CONDUCTOR"
+     * @param conductorId El ID propio del conductor — para filtrar rutas asignadas.
+     */
+    public String generateToken(String tenantId, String role, String conductorId) {
+        return Jwts.builder()
+                .subject(tenantId)
+                .claim("role", role)
+                .claim("conductorId", conductorId)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(getKey())
@@ -54,6 +72,10 @@ public class JwtUtil {
 
     public String extractRole(String token) {
         return parseToken(token).get("role", String.class);
+    }
+
+    public String extractConductorId(String token) {
+        return parseToken(token).get("conductorId", String.class);
     }
 
     public boolean isValid(String token) {

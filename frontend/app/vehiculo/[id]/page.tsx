@@ -44,6 +44,7 @@ interface Mantenimiento {
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production-54f9.up.railway.app";
+const DASHBOARD_ROUTE = "/dashboard";
 
 export default function VehiculoDetalle() {
   const router = useRouter();
@@ -196,7 +197,7 @@ export default function VehiculoDetalle() {
         <div className={styles.container}>
           <header className={styles.header}>
             <button
-              onClick={() => router.push("/")}
+              onClick={() => router.push(DASHBOARD_ROUTE)}
               style={{
                 background: "rgba(255,255,255,0.1)",
                 border: "1px solid rgba(255,255,255,0.2)",
