@@ -13,10 +13,16 @@ interface Vehiculo {
   modelo: string;
   kilometraje: number;
   tipoCombustible: string;
-  combustibleActual: number;  // Porcentaje (0–100%)
-  capacidadDeposito?: number; // Litros totales del depósito
-  consumoPor100km?: number;   // L/100km
+  combustibleActual: number;
+  capacidadDeposito?: number;
+  costeKmReferencia?: number;
   activo: boolean;
+}
+
+interface RutaEstado {
+  id: string;
+  estado: string;
+  vehiculoId: string;
 }
 
 interface Taller {
@@ -70,10 +76,13 @@ export default function VehiculoDetalle() {
   const [vehiculo, setVehiculo] = useState<Vehiculo | null>(null);
   const [mantenimientos, setMantenimientos] = useState<Mantenimiento[]>([]);
   const [repostajes, setRepostajes] = useState<Repostaje[]>([]);
+  const [rutas, setRutas] = useState<RutaEstado[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'mantenimientos' | 'repostajes'>('mantenimientos');
+  const [activeTab, setActiveTab] = useState<'mantenimientos' | 'repostajes' | 'editar'>('mantenimientos');
   const [mostrarFormMantenimiento, setMostrarFormMantenimiento] = useState(false);
   const [mostrarFormRepostaje, setMostrarFormRepostaje] = useState(false);
+  const [editData, setEditData] = useState<Partial<Vehiculo>>({});
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
 
   const [nuevoMantenimiento, setNuevoMantenimiento] = useState<Partial<Mantenimiento>>({
     tipo: "PREVENTIVO",
@@ -111,15 +120,17 @@ export default function VehiculoDetalle() {
   const cargarDatos = async () => {
     setLoading(true);
     try {
-      const [resVehiculo, resMantenimientos, resRepostajes] = await Promise.all([
+      const [resVehiculo, resMantenimientos, resRepostajes, resRutas] = await Promise.all([
         fetch(`${API_URL}/api/vehiculos/${id}`, { headers: getAuthHeaders() }),
         fetch(`${API_URL}/api/mantenimientos/vehiculo/${id}`, { headers: getAuthHeaders() }),
         fetch(`${API_URL}/api/repostajes/vehiculo/${id}`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/rutas/vehiculo/${id}`, { headers: getAuthHeaders() }),
       ]);
 
       if (resVehiculo.ok) setVehiculo(await resVehiculo.json());
       if (resMantenimientos.ok) setMantenimientos(await resMantenimientos.json());
       if (resRepostajes.ok) setRepostajes(await resRepostajes.json());
+      if (resRutas.ok) setRutas(await resRutas.json());
     } catch (err) {
       toast.error("Error al cargar los datos del vehículo");
     } finally {
@@ -237,12 +248,73 @@ export default function VehiculoDetalle() {
     } catch { toast.error("Error al eliminar repostaje"); }
   };
 
+  // ── Edición del vehículo ───────────────────────────────────────────────────
+
+  const abrirEdicion = () => {
+    setEditData({
+      marca: vehiculo?.marca,
+      modelo: vehiculo?.modelo,
+      matricula: vehiculo?.matricula,
+      kilometraje: vehiculo?.kilometraje,
+      tipoCombustible: vehiculo?.tipoCombustible,
+      combustibleActual: vehiculo?.combustibleActual,
+      capacidadDeposito: vehiculo?.capacidadDeposito,
+      costeKmReferencia: vehiculo?.costeKmReferencia,
+      activo: vehiculo?.activo,
+    });
+    setActiveTab('editar');
+  };
+
+  const handleGuardarEdicion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGuardandoEdicion(true);
+    try {
+      const res = await fetch(`${API_URL}/api/vehiculos/${id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(editData),
+      });
+      if (res.ok) {
+        toast.success('Vehículo actualizado');
+        await cargarDatos();
+        setActiveTab('mantenimientos');
+      } else if (res.status === 403) {
+        toast.error('Sin permisos para editar este vehículo');
+      } else {
+        toast.error('Error al guardar los cambios');
+      }
+    } catch {
+      toast.error('Error de conexión');
+    } finally {
+      setGuardandoEdicion(false);
+    }
+  };
+
   // ── Métricas ────────────────────────────────────────────────────────────────
 
   const costoTotalMantenimiento = mantenimientos.reduce((sum, m) => sum + (m.costo || 0), 0);
   const costoTotalCombustible = repostajes.reduce((sum, r) => sum + (r.costeTotal || 0), 0);
   const litrosTotales = repostajes.reduce((sum, r) => sum + (r.litros || 0), 0);
   const costoTotalVehiculo = costoTotalMantenimiento + costoTotalCombustible;
+
+  // €/km real: coste total / km totales del vehículo
+  const costeKmReal = vehiculo && vehiculo.kilometraje > 0 && costoTotalVehiculo > 0
+    ? costoTotalVehiculo / vehiculo.kilometraje
+    : null;
+
+  // L/100km calculado desde repostajes con odómetro registrado
+  const repConKm = repostajes.filter(r => r.kilometrajeActual && r.kilometrajeActual > 0);
+  const kmMax = repConKm.length > 0 ? Math.max(...repConKm.map(r => r.kilometrajeActual!)) : 0;
+  const kmMin = repConKm.length > 0 ? Math.min(...repConKm.map(r => r.kilometrajeActual!)) : 0;
+  const kmRango = kmMax - kmMin;
+  const consumoCalculado = kmRango > 10 && litrosTotales > 0 ? (litrosTotales / kmRango) * 100 : null;
+
+  // Estado real del vehículo cruzando datos de rutas activas
+  const enCurso = rutas.some(r => r.estado === 'EN_CURSO');
+  const detenido = rutas.some(r => r.estado === 'DETENIDO');
+  const estadoVehiculo = enCurso ? 'EN_RUTA' : detenido ? 'DETENIDO' : vehiculo?.activo ? 'ACTIVO' : 'EN_TALLER';
+  const estadoColor = { EN_RUTA: '#3bf63b', DETENIDO: '#facc15', ACTIVO: '#3bf63b', EN_TALLER: '#f87171' }[estadoVehiculo];
+  const estadoLabel = { EN_RUTA: 'En Ruta', DETENIDO: 'Detenido', ACTIVO: 'Activo', EN_TALLER: 'En Taller' }[estadoVehiculo];
 
 
 
@@ -277,9 +349,17 @@ export default function VehiculoDetalle() {
             >
               ← Volver al Dashboard
             </button>
-            <div className={styles.title}>
-              <h1>{vehiculo.marca} {vehiculo.modelo}</h1>
-              <p className={styles.subtitle}>Matrícula: {vehiculo.matricula}</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
+              <div className={styles.title}>
+                <h1>{vehiculo.marca} {vehiculo.modelo}</h1>
+                <p className={styles.subtitle}>Matrícula: {vehiculo.matricula}</p>
+              </div>
+              <button
+                onClick={abrirEdicion}
+                style={{ background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.3)', padding: '0.5rem 1.1rem', borderRadius: '8px', color: '#a78bfa', cursor: 'pointer', fontWeight: '600', fontSize: '0.875rem', whiteSpace: 'nowrap' }}
+              >
+                ✏️ Editar vehículo
+              </button>
             </div>
           </header>
 
@@ -320,10 +400,30 @@ export default function VehiculoDetalle() {
 
               <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <span style={{ display: 'block', fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.3rem' }}>Estado</span>
-                <span style={{ fontSize: '1rem', fontWeight: '700', color: vehiculo.activo ? '#3bf63b' : '#f87171' }}>
-                  {vehiculo.activo ? 'Activo' : 'En Taller'}
-                </span>
+                <span style={{ fontSize: '1rem', fontWeight: '700', color: estadoColor }}>{estadoLabel}</span>
                 <span style={{ display: 'block', fontSize: '0.75rem', color: '#4b5563', marginTop: '0.2rem' }}>{vehiculo.tipoCombustible}</span>
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <span style={{ display: 'block', fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.3rem' }}>Coste / km</span>
+                <span style={{ fontSize: '1.5rem', fontWeight: '800', color: '#a78bfa' }}>
+                  {costeKmReal != null ? `€${costeKmReal.toFixed(3)}` : '—'}
+                </span>
+                {vehiculo.costeKmReferencia && (
+                  <span style={{ display: 'block', fontSize: '0.7rem', color: '#6b7280', marginTop: '0.2rem' }}>
+                    ref: €{vehiculo.costeKmReferencia.toFixed(3)}/km
+                  </span>
+                )}
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <span style={{ display: 'block', fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.3rem' }}>Consumo real</span>
+                <span style={{ fontSize: '1.5rem', fontWeight: '800', color: '#38bdf8' }}>
+                  {consumoCalculado != null ? consumoCalculado.toFixed(1) : '—'}
+                </span>
+                <span style={{ fontSize: '0.75rem', color: '#4b5563', marginLeft: consumoCalculado != null ? '0.3rem' : 0 }}>
+                  {consumoCalculado != null ? 'L/100km' : 'sin datos odómetro'}
+                </span>
               </div>
             </div>
           </div>
@@ -353,6 +453,18 @@ export default function VehiculoDetalle() {
               }}
             >
               ⛽ Repostajes ({repostajes.length})
+            </button>
+            <button
+              onClick={abrirEdicion}
+              style={{
+                padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                fontWeight: '600', fontSize: '0.875rem', transition: 'all 0.2s',
+                background: activeTab === 'editar' ? 'linear-gradient(135deg, #a78bfa, #7c3aed)' : 'transparent',
+                color: activeTab === 'editar' ? '#fff' : 'rgba(255,255,255,0.5)',
+                boxShadow: activeTab === 'editar' ? '0 2px 12px rgba(167,139,250,0.35)' : 'none',
+              }}
+            >
+              ✏️ Editar
             </button>
           </div>
 
@@ -768,6 +880,132 @@ export default function VehiculoDetalle() {
                 )}
               </div>
             </>
+          )}
+
+          {/* ══════════════════════════════════════════════════════════════════
+              TAB: EDITAR VEHÍCULO
+          ══════════════════════════════════════════════════════════════════ */}
+          {activeTab === 'editar' && (
+            <div className={styles.card}>
+              <h3 className={styles.cardTitle} style={{ marginBottom: '1.5rem' }}>Editar datos del vehículo</h3>
+              <form onSubmit={handleGuardarEdicion}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
+
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Marca</label>
+                    <input className={styles.input} type="text" value={editData.marca || ''} required
+                      onChange={e => setEditData({ ...editData, marca: e.target.value })} />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Modelo</label>
+                    <input className={styles.input} type="text" value={editData.modelo || ''} required
+                      onChange={e => setEditData({ ...editData, modelo: e.target.value })} />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Matrícula</label>
+                    <input className={styles.input} type="text" value={editData.matricula || ''} required
+                      onChange={e => setEditData({ ...editData, matricula: e.target.value.toUpperCase() })} />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Tipo de combustible</label>
+                    <select className={styles.select} value={editData.tipoCombustible || ''}
+                      onChange={e => setEditData({ ...editData, tipoCombustible: e.target.value })}>
+                      <option value="gasolina">Gasolina</option>
+                      <option value="diesel">Diesel</option>
+                      <option value="hibrido">Híbrido</option>
+                      <option value="electrico">Eléctrico</option>
+                    </select>
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <label className={styles.label} style={{ marginBottom: 0 }}>Kilometraje</label>
+                      <span style={{ fontWeight: 'bold', color: '#fff' }}>{(editData.kilometraje || 0).toLocaleString()} km</span>
+                    </div>
+                    <input className={styles.input} type="number" min="0" step="1"
+                      value={editData.kilometraje || 0}
+                      onChange={e => setEditData({ ...editData, kilometraje: Number(e.target.value) })} />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <label className={styles.label} style={{ marginBottom: 0 }}>Combustible actual</label>
+                      <span style={{ fontWeight: 'bold', color: '#f59e0b' }}>{editData.combustibleActual ?? 0}%</span>
+                    </div>
+                    <input className={styles.input} type="range" min="0" max="100" step="1"
+                      style={{ padding: '0.5rem', cursor: 'pointer' }}
+                      value={editData.combustibleActual ?? 0}
+                      onChange={e => setEditData({ ...editData, combustibleActual: Number(e.target.value) })} />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <label className={styles.label} style={{ marginBottom: 0 }}>Capacidad depósito</label>
+                      <span style={{ fontWeight: 'bold', color: '#6b7280' }}>{editData.capacidadDeposito || '—'} L</span>
+                    </div>
+                    <input className={styles.input} type="number" min="10" max="500" step="5" placeholder="60"
+                      value={editData.capacidadDeposito || ''}
+                      onChange={e => setEditData({ ...editData, capacidadDeposito: Number(e.target.value) || undefined })} />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <label className={styles.label} style={{ marginBottom: 0 }}>Coste referencia/km</label>
+                      <span style={{ fontWeight: 'bold', color: '#a78bfa' }}>
+                        {editData.costeKmReferencia ? `€${editData.costeKmReferencia}/km` : '—'}
+                      </span>
+                    </div>
+                    <input className={styles.input} type="number" min="0" max="10" step="0.01" placeholder="0.35"
+                      value={editData.costeKmReferencia || ''}
+                      onChange={e => setEditData({ ...editData, costeKmReferencia: Number(e.target.value) || undefined })} />
+                    <span style={{ fontSize: '0.7rem', color: '#6b7280', display: 'block', marginTop: '0.25rem' }}>€/km presupuestado para comparar con el coste real</span>
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Estado del vehículo</label>
+                    <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                      <button type="button"
+                        onClick={() => setEditData({ ...editData, activo: true })}
+                        style={{
+                          flex: 1, padding: '0.6rem', borderRadius: '8px', border: '1px solid',
+                          cursor: 'pointer', fontWeight: '600', fontSize: '0.875rem',
+                          borderColor: editData.activo ? '#3bf63b' : 'rgba(255,255,255,0.1)',
+                          background: editData.activo ? 'rgba(59,246,59,0.12)' : 'transparent',
+                          color: editData.activo ? '#3bf63b' : '#6b7280',
+                        }}>
+                        Activo
+                      </button>
+                      <button type="button"
+                        onClick={() => setEditData({ ...editData, activo: false })}
+                        style={{
+                          flex: 1, padding: '0.6rem', borderRadius: '8px', border: '1px solid',
+                          cursor: 'pointer', fontWeight: '600', fontSize: '0.875rem',
+                          borderColor: editData.activo === false ? '#f87171' : 'rgba(255,255,255,0.1)',
+                          background: editData.activo === false ? 'rgba(248,113,113,0.12)' : 'transparent',
+                          color: editData.activo === false ? '#f87171' : '#6b7280',
+                        }}>
+                        En Taller
+                      </button>
+                    </div>
+                  </div>
+
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '2rem' }}>
+                  <button type="submit" disabled={guardandoEdicion}
+                    style={{ padding: '0.75rem 2rem', borderRadius: '10px', border: 'none', cursor: guardandoEdicion ? 'not-allowed' : 'pointer', fontWeight: '700', fontSize: '0.95rem', background: 'linear-gradient(135deg, #a78bfa, #7c3aed)', color: '#fff', opacity: guardandoEdicion ? 0.6 : 1 }}>
+                    {guardandoEdicion ? 'Guardando...' : 'Guardar cambios'}
+                  </button>
+                  <button type="button" onClick={() => setActiveTab('mantenimientos')}
+                    style={{ padding: '0.75rem 1.5rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', fontWeight: '600', fontSize: '0.95rem', background: 'transparent', color: 'rgba(255,255,255,0.5)' }}>
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            </div>
           )}
 
         </div>

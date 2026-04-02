@@ -33,7 +33,8 @@ interface Vehiculo {
   tipoCombustible: string;
   combustibleActual: number;  // Porcentaje (0–100%)
   capacidadDeposito?: number; // Litros totales del depósito (ej: 60)
-  consumoPor100km?: number;   // L/100km (ej: 8.0)
+  consumoPor100km?: number;   // L/100km — calculado automáticamente, no editable
+  costeKmReferencia?: number; // €/km presupuestado de referencia
   activo: boolean;
 }
 
@@ -706,7 +707,7 @@ export default function Dashboard() {
                   </div>
                   <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                     {(() => {
-                      const estaOcupado = rutas.some(r => r.vehiculoId === v.id && r.estado !== 'COMPLETADA');
+                      const estaOcupado = rutas.some(r => r.vehiculoId === v.id && (r.estado === 'EN_CURSO' || r.estado === 'DETENIDO'));
                       return (
                         <span
                           className={styles.badge}
@@ -818,11 +819,14 @@ export default function Dashboard() {
                   </div>
                   <div className={styles.formGroup}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                      <label className={styles.label} style={{ marginBottom: 0 }}>Consumo estimado</label>
-                      <span style={{ fontWeight: 'bold', color: '#6b7280' }}>{nuevoVehiculo.consumoPor100km || 8} L/100km</span>
+                      <label className={styles.label} style={{ marginBottom: 0 }}>Coste referencia/km</label>
+                      <span style={{ fontWeight: 'bold', color: '#6b7280' }}>
+                        {nuevoVehiculo.costeKmReferencia ? `€${nuevoVehiculo.costeKmReferencia}/km` : '—'}
+                      </span>
                     </div>
-                    <input className={styles.input} type="number" min="1" max="50" step="0.5" placeholder="8.0"
-                      value={nuevoVehiculo.consumoPor100km || ''} onChange={e => setNuevoVehiculo({ ...nuevoVehiculo, consumoPor100km: Number(e.target.value) || undefined })} />
+                    <input className={styles.input} type="number" min="0" max="10" step="0.01" placeholder="0.35"
+                      value={nuevoVehiculo.costeKmReferencia || ''} onChange={e => setNuevoVehiculo({ ...nuevoVehiculo, costeKmReferencia: Number(e.target.value) || undefined })} />
+                    <span style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '0.25rem', display: 'block' }}>€/km presupuestado — referencia para evaluar eficiencia real</span>
                   </div>
                 </div>
                 <button type="submit" className={styles.submitButton}>Guardar Vehículo</button>

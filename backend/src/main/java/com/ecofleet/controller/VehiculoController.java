@@ -37,6 +37,29 @@ public class VehiculoController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @PutMapping("/{id}")
+    public ResponseEntity<Vehiculo> actualizarVehiculo(@PathVariable String id,
+                                                        @RequestBody Vehiculo datos,
+                                                        HttpServletRequest request) {
+        String usuarioId = (String) request.getAttribute("userId");
+        return vehiculoRepository.findById(id)
+                .filter(v -> usuarioId.equals(v.getUsuarioId()))
+                .map(v -> {
+                    if (datos.getMarca() != null)            v.setMarca(datos.getMarca());
+                    if (datos.getModelo() != null)           v.setModelo(datos.getModelo());
+                    if (datos.getMatricula() != null)        v.setMatricula(datos.getMatricula());
+                    if (datos.getKilometraje() != null)      v.setKilometraje(datos.getKilometraje());
+                    if (datos.getTipoCombustible() != null)  v.setTipoCombustible(datos.getTipoCombustible());
+                    if (datos.getCombustibleActual() != null) v.setCombustibleActual(datos.getCombustibleActual());
+                    if (datos.getCapacidadDeposito() != null) v.setCapacidadDeposito(datos.getCapacidadDeposito());
+                    if (datos.getConsumoPor100km() != null)   v.setConsumoPor100km(datos.getConsumoPor100km());
+                    if (datos.getCosteKmReferencia() != null) v.setCosteKmReferencia(datos.getCosteKmReferencia());
+                    if (datos.getActivo() != null)           v.setActivo(datos.getActivo());
+                    return ResponseEntity.ok(vehiculoRepository.save(v));
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminarVehiculo(@PathVariable String id) {
         if (vehiculoRepository.existsById(id)) {

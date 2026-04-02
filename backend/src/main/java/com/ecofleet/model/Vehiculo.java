@@ -19,6 +19,7 @@ public class Vehiculo {
     private Double combustibleActual;   // Porcentaje del depósito (0–100%)
     private Double capacidadDeposito;   // Litros totales del depósito (ej: 60L)
     private Double consumoPor100km;     // Litros consumidos por cada 100 km (ej: 8.0)
+    private Double costeKmReferencia;   // €/km presupuestado de referencia
     private String tipoCombustible;
     
     
