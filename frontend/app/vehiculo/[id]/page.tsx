@@ -65,6 +65,59 @@ interface Repostaje {
   conductorNombre?: string;
 }
 
+interface DocumentoVehiculo {
+  id?: string;
+  vehiculoId: string;
+  empresaId?: string;
+  tipoDocumento: string;
+  descripcion: string;
+  numeroReferencia: string;
+  fechaEmision: string;
+  fechaVencimiento: string;
+  notas: string;
+  vehiculoInfo?: string;
+}
+
+interface ProgramacionMantenimiento {
+  id?: string;
+  vehiculoId: string;
+  empresaId?: string;
+  nombre: string;
+  descripcion: string;
+  tipoIntervalo: string; // POR_KM | POR_TIEMPO | AMBOS
+  intervaloKm?: number;
+  ultimoKmRealizado?: number;
+  intervaloMeses?: number;
+  ultimaFechaRealizado?: string;
+  activo: boolean;
+  vehiculoInfo?: string;
+}
+
+const TIPOS_DOCUMENTO = [
+  { value: "ITV", label: "ITV" },
+  { value: "SEGURO", label: "Seguro" },
+  { value: "PERMISO_CIRCULACION", label: "Permiso de Circulación" },
+  { value: "TARJETA_TRANSPORTE", label: "Tarjeta de Transporte" },
+  { value: "OTRO", label: "Otro" },
+];
+
+function diasHastaVencimiento(fecha: string): number {
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const venc = new Date(fecha);
+  venc.setHours(0, 0, 0, 0);
+  return Math.ceil((venc.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function estadoDocumento(fecha: string): { label: string; color: string; bg: string } {
+  const dias = diasHastaVencimiento(fecha);
+  if (dias < 0) return { label: `Vencido hace ${Math.abs(dias)}d`, color: "#ef4444", bg: "rgba(239,68,68,0.12)" };
+  if (dias <= 7) return { label: `Vence en ${dias}d`, color: "#ef4444", bg: "rgba(239,68,68,0.12)" };
+  if (dias <= 15) return { label: `Vence en ${dias}d`, color: "#f59e0b", bg: "rgba(245,158,11,0.12)" };
+  if (dias <= 30) return { label: `Vence en ${dias}d`, color: "#3b82f6", bg: "rgba(59,130,246,0.12)" };
+  return { label: "Vigente", color: "#22c55e", bg: "rgba(34,197,94,0.12)" };
+}
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production-54f9.up.railway.app";
 const DASHBOARD_ROUTE = "/dashboard";
 
@@ -78,11 +131,28 @@ export default function VehiculoDetalle() {
   const [repostajes, setRepostajes] = useState<Repostaje[]>([]);
   const [rutas, setRutas] = useState<RutaEstado[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'mantenimientos' | 'repostajes' | 'editar'>('mantenimientos');
+  const [activeTab, setActiveTab] = useState<'mantenimientos' | 'repostajes' | 'documentos' | 'programaciones' | 'editar'>('mantenimientos');
   const [mostrarFormMantenimiento, setMostrarFormMantenimiento] = useState(false);
   const [mostrarFormRepostaje, setMostrarFormRepostaje] = useState(false);
   const [editData, setEditData] = useState<Partial<Vehiculo>>({});
   const [guardandoEdicion, setGuardandoEdicion] = useState(false);
+
+  // ── Documentos ──
+  const [documentos, setDocumentos] = useState<DocumentoVehiculo[]>([]);
+  const [mostrarFormDocumento, setMostrarFormDocumento] = useState(false);
+  const [nuevoDocumento, setNuevoDocumento] = useState<Partial<DocumentoVehiculo>>({
+    tipoDocumento: "ITV", descripcion: "", numeroReferencia: "",
+    fechaEmision: new Date().toISOString().split("T")[0],
+    fechaVencimiento: "", notas: "",
+  });
+
+  // ── Programaciones de mantenimiento ──
+  const [programaciones, setProgramaciones] = useState<ProgramacionMantenimiento[]>([]);
+  const [mostrarFormProgramacion, setMostrarFormProgramacion] = useState(false);
+  const [nuevaProgramacion, setNuevaProgramacion] = useState<Partial<ProgramacionMantenimiento>>({
+    nombre: "", descripcion: "", tipoIntervalo: "POR_KM",
+    intervaloKm: 15000, intervaloMeses: 6, activo: true,
+  });
 
   const [nuevoMantenimiento, setNuevoMantenimiento] = useState<Partial<Mantenimiento>>({
     tipo: "PREVENTIVO",
@@ -120,17 +190,21 @@ export default function VehiculoDetalle() {
   const cargarDatos = async () => {
     setLoading(true);
     try {
-      const [resVehiculo, resMantenimientos, resRepostajes, resRutas] = await Promise.all([
+      const [resVehiculo, resMantenimientos, resRepostajes, resRutas, resDocumentos, resProgramaciones] = await Promise.all([
         fetch(`${API_URL}/api/vehiculos/${id}`, { headers: getAuthHeaders() }),
         fetch(`${API_URL}/api/mantenimientos/vehiculo/${id}`, { headers: getAuthHeaders() }),
         fetch(`${API_URL}/api/repostajes/vehiculo/${id}`, { headers: getAuthHeaders() }),
         fetch(`${API_URL}/api/rutas/vehiculo/${id}`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/documentos/vehiculo/${id}`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/programaciones/vehiculo/${id}`, { headers: getAuthHeaders() }),
       ]);
 
       if (resVehiculo.ok) setVehiculo(await resVehiculo.json());
       if (resMantenimientos.ok) setMantenimientos(await resMantenimientos.json());
       if (resRepostajes.ok) setRepostajes(await resRepostajes.json());
       if (resRutas.ok) setRutas(await resRutas.json());
+      if (resDocumentos.ok) setDocumentos(await resDocumentos.json());
+      if (resProgramaciones.ok) setProgramaciones(await resProgramaciones.json());
     } catch (err) {
       toast.error("Error al cargar los datos del vehículo");
     } finally {
@@ -288,6 +362,97 @@ export default function VehiculoDetalle() {
     } finally {
       setGuardandoEdicion(false);
     }
+  };
+
+  // ── Documentos handlers ─────────────────────────────────────────────────────
+
+  const handleCrearDocumento = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nuevoDocumento.fechaVencimiento) {
+      toast.warning("Ingresá la fecha de vencimiento");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_URL}/api/documentos`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ ...nuevoDocumento, vehiculoId: id }),
+      });
+      if (res.ok) {
+        toast.success("Documento registrado");
+        setMostrarFormDocumento(false);
+        cargarDatos();
+        setNuevoDocumento({
+          tipoDocumento: "ITV", descripcion: "", numeroReferencia: "",
+          fechaEmision: new Date().toISOString().split("T")[0],
+          fechaVencimiento: "", notas: "",
+        });
+      } else if (res.status === 403) {
+        toast.error("Sin permisos para este vehículo");
+      }
+    } catch { toast.error("Error al registrar documento"); }
+  };
+
+  const handleEliminarDocumento = async (docId: string) => {
+    try {
+      const res = await fetch(`${API_URL}/api/documentos/${docId}`, {
+        method: "DELETE", headers: getAuthHeaders(),
+      });
+      if (res.ok) { toast.success("Documento eliminado"); cargarDatos(); }
+    } catch { toast.error("Error al eliminar documento"); }
+  };
+
+  // ── Programaciones handlers ────────────────────────────────────────────────
+
+  const handleCrearProgramacion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nuevaProgramacion.nombre) {
+      toast.warning("Ingresá un nombre para la programación");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_URL}/api/programaciones`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          ...nuevaProgramacion,
+          vehiculoId: id,
+          ultimaFechaRealizado: nuevaProgramacion.ultimaFechaRealizado || new Date().toISOString().split("T")[0],
+        }),
+      });
+      if (res.ok) {
+        toast.success("Programación creada");
+        setMostrarFormProgramacion(false);
+        cargarDatos();
+        setNuevaProgramacion({
+          nombre: "", descripcion: "", tipoIntervalo: "POR_KM",
+          intervaloKm: 15000, intervaloMeses: 6, activo: true,
+        });
+      } else if (res.status === 403) {
+        toast.error("Sin permisos para este vehículo");
+      }
+    } catch { toast.error("Error al crear programación"); }
+  };
+
+  const handleMarcarRealizado = async (progId: string) => {
+    try {
+      const res = await fetch(`${API_URL}/api/programaciones/${progId}/marcar-realizado`, {
+        method: "PUT", headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        toast.success("Mantenimiento marcado como realizado — contadores reiniciados");
+        cargarDatos();
+      }
+    } catch { toast.error("Error al marcar como realizado"); }
+  };
+
+  const handleEliminarProgramacion = async (progId: string) => {
+    try {
+      const res = await fetch(`${API_URL}/api/programaciones/${progId}`, {
+        method: "DELETE", headers: getAuthHeaders(),
+      });
+      if (res.ok) { toast.success("Programación eliminada"); cargarDatos(); }
+    } catch { toast.error("Error al eliminar programación"); }
   };
 
   // ── Métricas ────────────────────────────────────────────────────────────────
@@ -453,6 +618,30 @@ export default function VehiculoDetalle() {
               }}
             >
               ⛽ Repostajes ({repostajes.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('documentos')}
+              style={{
+                padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                fontWeight: '600', fontSize: '0.875rem', transition: 'all 0.2s',
+                background: activeTab === 'documentos' ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : 'transparent',
+                color: activeTab === 'documentos' ? '#fff' : 'rgba(255,255,255,0.5)',
+                boxShadow: activeTab === 'documentos' ? '0 2px 12px rgba(59,130,246,0.35)' : 'none',
+              }}
+            >
+              📄 Documentos ({documentos.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('programaciones')}
+              style={{
+                padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                fontWeight: '600', fontSize: '0.875rem', transition: 'all 0.2s',
+                background: activeTab === 'programaciones' ? 'linear-gradient(135deg, #8b5cf6, #6d28d9)' : 'transparent',
+                color: activeTab === 'programaciones' ? '#fff' : 'rgba(255,255,255,0.5)',
+                boxShadow: activeTab === 'programaciones' ? '0 2px 12px rgba(139,92,246,0.35)' : 'none',
+              }}
+            >
+              📅 Programaciones ({programaciones.length})
             </button>
             <button
               onClick={abrirEdicion}
@@ -876,6 +1065,390 @@ export default function VehiculoDetalle() {
                     <div style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.4 }}>⛽</div>
                     <h3 style={{ color: '#fff', marginBottom: '0.5rem' }}>Sin repostajes registrados</h3>
                     <p style={{ color: "#6b7280" }}>Registrá el primer repostaje para empezar a rastrear el gasto en combustible.</p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ══════════════════════════════════════════════════════════════════
+              TAB: DOCUMENTOS
+          ══════════════════════════════════════════════════════════════════ */}
+          {activeTab === 'documentos' && (
+            <>
+              {/* Stats de documentos */}
+              {documentos.length > 0 && (() => {
+                const vencidos = documentos.filter(d => diasHastaVencimiento(d.fechaVencimiento) < 0).length;
+                const proximos = documentos.filter(d => { const dias = diasHastaVencimiento(d.fechaVencimiento); return dias >= 0 && dias <= 30; }).length;
+                const vigentes = documentos.filter(d => diasHastaVencimiento(d.fechaVencimiento) > 30).length;
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                    <div style={{ background: 'rgba(34,197,94,0.08)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(34,197,94,0.2)', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.3rem' }}>Vigentes</div>
+                      <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#22c55e' }}>{vigentes}</div>
+                    </div>
+                    <div style={{ background: 'rgba(59,130,246,0.08)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(59,130,246,0.2)', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.3rem' }}>Próximos a vencer</div>
+                      <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#3b82f6' }}>{proximos}</div>
+                    </div>
+                    <div style={{ background: 'rgba(239,68,68,0.08)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(239,68,68,0.2)', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.3rem' }}>Vencidos</div>
+                      <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#ef4444' }}>{vencidos}</div>
+                    </div>
+                    <div style={{ background: 'rgba(59,130,246,0.08)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(59,130,246,0.2)', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.3rem' }}>Total</div>
+                      <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#3b82f6' }}>{documentos.length}</div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div style={{ marginBottom: '2rem' }}>
+                <button
+                  onClick={() => setMostrarFormDocumento(!mostrarFormDocumento)}
+                  style={{ padding: '0.875rem 1.5rem', background: mostrarFormDocumento ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg, #3b82f6, #2563eb)', color: mostrarFormDocumento ? 'white' : '#fff', border: mostrarFormDocumento ? '1px solid rgba(255,255,255,0.2)' : 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer', transition: 'all 0.2s' }}
+                >
+                  {mostrarFormDocumento ? 'Cancelar' : '📄 Nuevo Documento'}
+                </button>
+              </div>
+
+              {mostrarFormDocumento && (
+                <div className={styles.formContainer} style={{ marginBottom: '2rem' }}>
+                  <h3 style={{ marginBottom: '1.25rem', color: '#3b82f6' }}>Registrar Documento</h3>
+                  <form onSubmit={handleCrearDocumento}>
+                    <div className={styles.formRow}>
+                      <div className={styles.formGroup}>
+                        <label className={styles.label}>Tipo de Documento</label>
+                        <select className={styles.select} value={nuevoDocumento.tipoDocumento}
+                          onChange={(e) => setNuevoDocumento({ ...nuevoDocumento, tipoDocumento: e.target.value })} required>
+                          {TIPOS_DOCUMENTO.map(t => (
+                            <option key={t.value} value={t.value}>{t.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className={styles.formGroup}>
+                        <label className={styles.label}>Nº de Referencia <span style={{ color: '#6b7280', fontSize: '0.8rem' }}>(póliza, expediente, etc.)</span></label>
+                        <input className={styles.input} type="text" placeholder="Ej: POL-2026-1234"
+                          value={nuevoDocumento.numeroReferencia}
+                          onChange={(e) => setNuevoDocumento({ ...nuevoDocumento, numeroReferencia: e.target.value })} />
+                      </div>
+                    </div>
+
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>Descripción</label>
+                      <input className={styles.input} type="text" placeholder="Ej: Seguro a todo riesgo — Mapfre"
+                        value={nuevoDocumento.descripcion}
+                        onChange={(e) => setNuevoDocumento({ ...nuevoDocumento, descripcion: e.target.value })} required />
+                    </div>
+
+                    <div className={styles.formRow}>
+                      <div className={styles.formGroup}>
+                        <label className={styles.label}>Fecha de Emisión</label>
+                        <input className={styles.input} type="date"
+                          value={nuevoDocumento.fechaEmision}
+                          onChange={(e) => setNuevoDocumento({ ...nuevoDocumento, fechaEmision: e.target.value })} required />
+                      </div>
+                      <div className={styles.formGroup}>
+                        <label className={styles.label}>Fecha de Vencimiento</label>
+                        <input className={styles.input} type="date"
+                          value={nuevoDocumento.fechaVencimiento}
+                          onChange={(e) => setNuevoDocumento({ ...nuevoDocumento, fechaVencimiento: e.target.value })} required />
+                      </div>
+                    </div>
+
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>Notas <span style={{ color: '#6b7280', fontSize: '0.8rem' }}>(opcional)</span></label>
+                      <textarea className={styles.input} rows={2} placeholder="Información adicional..."
+                        value={nuevoDocumento.notas}
+                        onChange={(e) => setNuevoDocumento({ ...nuevoDocumento, notas: e.target.value })} />
+                    </div>
+
+                    <button type="submit"
+                      style={{ width: '100%', padding: '1rem', background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '1rem', cursor: 'pointer', transition: 'all 0.2s', marginTop: '0.5rem' }}>
+                      Guardar Documento
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              <h2 style={{ marginBottom: '1rem' }}>Documentos del Vehículo</h2>
+              <div className={styles.grid}>
+                {documentos.map((doc) => {
+                  const estado = estadoDocumento(doc.fechaVencimiento);
+                  const tipoLabel = TIPOS_DOCUMENTO.find(t => t.value === doc.tipoDocumento)?.label || doc.tipoDocumento;
+                  return (
+                    <div key={doc.id} className={styles.card}
+                      style={{ borderLeft: `6px solid ${estado.color}`, background: 'linear-gradient(145deg, rgba(30,30,40,0.95), rgba(20,20,25,0.9))' }}>
+                      <div className={styles.cardHeader}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+                            <span className={styles.badge} style={{
+                              backgroundColor: 'rgba(59,130,246,0.15)', color: '#60a5fa',
+                              border: '1px solid rgba(59,130,246,0.2)',
+                            }}>{tipoLabel}</span>
+                            <span className={styles.badge} style={{
+                              backgroundColor: estado.bg, color: estado.color,
+                              border: `1px solid ${estado.color}33`,
+                            }}>{estado.label}</span>
+                          </div>
+                          <h4 className={styles.cardTitle} style={{ fontSize: '1.1rem', marginBottom: '0.4rem' }}>{doc.descripcion || tipoLabel}</h4>
+                          {doc.numeroReferencia && (
+                            <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginBottom: '0.2rem' }}>
+                              🔖 Ref: {doc.numeroReferencia}
+                            </div>
+                          )}
+                        </div>
+                        <button onClick={() => doc.id && handleEliminarDocumento(doc.id)}
+                          style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', cursor: 'pointer', color: '#ef4444', width: '32px', height: '32px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginTop: '1rem', background: 'rgba(0,0,0,0.3)', padding: '0.875rem', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div>
+                          <span style={{ display: 'block', fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.2rem' }}>Emisión</span>
+                          <span style={{ fontSize: '0.95rem', fontWeight: '700', color: '#fff' }}>{doc.fechaEmision ? new Date(doc.fechaEmision).toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</span>
+                        </div>
+                        <div>
+                          <span style={{ display: 'block', fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.2rem' }}>Vencimiento</span>
+                          <span style={{ fontSize: '0.95rem', fontWeight: '700', color: estado.color }}>{doc.fechaVencimiento ? new Date(doc.fechaVencimiento).toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</span>
+                        </div>
+                      </div>
+
+                      {doc.notas && (
+                        <div style={{ marginTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.6rem' }}>
+                          <p style={{ fontSize: '0.8rem', color: '#6b7280', fontStyle: 'italic', margin: 0 }}>
+                            <span style={{ color: '#4b5563', marginRight: '0.3rem' }}>Notas:</span>{doc.notas}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {documentos.length === 0 && (
+                  <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '4rem 2rem', background: 'rgba(255,255,255,0.02)', borderRadius: '24px', border: '2px dashed rgba(59,130,246,0.15)' }}>
+                    <div style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.4 }}>📄</div>
+                    <h3 style={{ color: '#fff', marginBottom: '0.5rem' }}>Sin documentos registrados</h3>
+                    <p style={{ color: '#6b7280' }}>Registrá ITV, seguros y otros documentos para recibir alertas de vencimiento.</p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ══════════════════════════════════════════════════════════════════
+              TAB: PROGRAMACIONES DE MANTENIMIENTO
+          ══════════════════════════════════════════════════════════════════ */}
+          {activeTab === 'programaciones' && (
+            <>
+              {/* Stats de programaciones */}
+              {programaciones.length > 0 && (() => {
+                const activas = programaciones.filter(p => p.activo).length;
+                const porKm = programaciones.filter(p => p.tipoIntervalo === 'POR_KM' || p.tipoIntervalo === 'AMBOS').length;
+                const porTiempo = programaciones.filter(p => p.tipoIntervalo === 'POR_TIEMPO' || p.tipoIntervalo === 'AMBOS').length;
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                    <div style={{ background: 'rgba(139,92,246,0.08)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(139,92,246,0.2)', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.3rem' }}>Activas</div>
+                      <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#8b5cf6' }}>{activas}</div>
+                    </div>
+                    <div style={{ background: 'rgba(139,92,246,0.08)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(139,92,246,0.2)', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.3rem' }}>Por Km</div>
+                      <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#8b5cf6' }}>{porKm}</div>
+                    </div>
+                    <div style={{ background: 'rgba(139,92,246,0.08)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(139,92,246,0.2)', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.3rem' }}>Por Tiempo</div>
+                      <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#8b5cf6' }}>{porTiempo}</div>
+                    </div>
+                    <div style={{ background: 'rgba(139,92,246,0.08)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(139,92,246,0.2)', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.3rem' }}>Total</div>
+                      <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#8b5cf6' }}>{programaciones.length}</div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div style={{ marginBottom: '2rem' }}>
+                <button
+                  onClick={() => setMostrarFormProgramacion(!mostrarFormProgramacion)}
+                  style={{ padding: '0.875rem 1.5rem', background: mostrarFormProgramacion ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg, #8b5cf6, #6d28d9)', color: '#fff', border: mostrarFormProgramacion ? '1px solid rgba(255,255,255,0.2)' : 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer', transition: 'all 0.2s' }}
+                >
+                  {mostrarFormProgramacion ? 'Cancelar' : '📅 Nueva Programación'}
+                </button>
+              </div>
+
+              {mostrarFormProgramacion && (
+                <div className={styles.formContainer} style={{ marginBottom: '2rem' }}>
+                  <h3 style={{ marginBottom: '1.25rem', color: '#8b5cf6' }}>Nueva Programación de Mantenimiento</h3>
+                  <form onSubmit={handleCrearProgramacion}>
+                    <div className={styles.formRow}>
+                      <div className={styles.formGroup}>
+                        <label className={styles.label}>Nombre</label>
+                        <input className={styles.input} type="text" placeholder="Ej: Cambio de aceite"
+                          value={nuevaProgramacion.nombre}
+                          onChange={(e) => setNuevaProgramacion({ ...nuevaProgramacion, nombre: e.target.value })} required />
+                      </div>
+                      <div className={styles.formGroup}>
+                        <label className={styles.label}>Tipo de Intervalo</label>
+                        <select className={styles.select} value={nuevaProgramacion.tipoIntervalo}
+                          onChange={(e) => setNuevaProgramacion({ ...nuevaProgramacion, tipoIntervalo: e.target.value })} required>
+                          <option value="POR_KM">Por Kilómetros</option>
+                          <option value="POR_TIEMPO">Por Tiempo</option>
+                          <option value="AMBOS">Ambos (el primero que llegue)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>Descripción <span style={{ color: '#6b7280', fontSize: '0.8rem' }}>(opcional)</span></label>
+                      <input className={styles.input} type="text" placeholder="Ej: Aceite sintético 5W30 + filtro"
+                        value={nuevaProgramacion.descripcion}
+                        onChange={(e) => setNuevaProgramacion({ ...nuevaProgramacion, descripcion: e.target.value })} />
+                    </div>
+
+                    <div className={styles.formRow}>
+                      {(nuevaProgramacion.tipoIntervalo === 'POR_KM' || nuevaProgramacion.tipoIntervalo === 'AMBOS') && (
+                        <div className={styles.formGroup}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                            <label className={styles.label} style={{ marginBottom: 0 }}>Intervalo en Km</label>
+                            <span style={{ fontWeight: 'bold', color: '#8b5cf6' }}>{(nuevaProgramacion.intervaloKm || 0).toLocaleString()} km</span>
+                          </div>
+                          <input className={styles.input} type="number" min="500" step="500" placeholder="15000"
+                            value={nuevaProgramacion.intervaloKm || ''}
+                            onChange={(e) => setNuevaProgramacion({ ...nuevaProgramacion, intervaloKm: parseInt(e.target.value) || 0 })} required />
+                        </div>
+                      )}
+                      {(nuevaProgramacion.tipoIntervalo === 'POR_TIEMPO' || nuevaProgramacion.tipoIntervalo === 'AMBOS') && (
+                        <div className={styles.formGroup}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                            <label className={styles.label} style={{ marginBottom: 0 }}>Intervalo en Meses</label>
+                            <span style={{ fontWeight: 'bold', color: '#8b5cf6' }}>{nuevaProgramacion.intervaloMeses || 0} meses</span>
+                          </div>
+                          <input className={styles.input} type="number" min="1" max="60" step="1" placeholder="6"
+                            value={nuevaProgramacion.intervaloMeses || ''}
+                            onChange={(e) => setNuevaProgramacion({ ...nuevaProgramacion, intervaloMeses: parseInt(e.target.value) || 0 })} required />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>Última fecha realizado <span style={{ color: '#6b7280', fontSize: '0.8rem' }}>(opcional — si no se indica, se usa hoy)</span></label>
+                      <input className={styles.input} type="date"
+                        value={nuevaProgramacion.ultimaFechaRealizado || ''}
+                        onChange={(e) => setNuevaProgramacion({ ...nuevaProgramacion, ultimaFechaRealizado: e.target.value })} />
+                    </div>
+
+                    <button type="submit"
+                      style={{ width: '100%', padding: '1rem', background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '1rem', cursor: 'pointer', transition: 'all 0.2s', marginTop: '0.5rem' }}>
+                      Crear Programación
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              <h2 style={{ marginBottom: '1rem' }}>Programaciones de Mantenimiento</h2>
+              <div className={styles.grid}>
+                {programaciones.map((prog) => {
+                  const tipoLabel = { POR_KM: '🛣️ Por Km', POR_TIEMPO: '🕐 Por Tiempo', AMBOS: '🔄 Ambos' }[prog.tipoIntervalo] || prog.tipoIntervalo;
+                  // Calcular próximo km
+                  const proximoKm = prog.intervaloKm && prog.intervaloKm > 0
+                    ? ((prog.ultimoKmRealizado || 0) + prog.intervaloKm)
+                    : null;
+                  const kmRestantes = proximoKm && vehiculo ? proximoKm - vehiculo.kilometraje : null;
+                  const kmUrgente = kmRestantes !== null && kmRestantes <= 1000;
+                  // Calcular próxima fecha
+                  const proximaFecha = prog.intervaloMeses && prog.intervaloMeses > 0
+                    ? (() => {
+                        const base = prog.ultimaFechaRealizado ? new Date(prog.ultimaFechaRealizado) : new Date();
+                        base.setMonth(base.getMonth() + prog.intervaloMeses);
+                        return base;
+                      })()
+                    : null;
+                  const diasRestantes = proximaFecha ? Math.ceil((proximaFecha.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null;
+                  const tiempoUrgente = diasRestantes !== null && diasRestantes <= 15;
+                  const esUrgente = kmUrgente || tiempoUrgente;
+
+                  return (
+                    <div key={prog.id} className={styles.card}
+                      style={{ borderLeft: `6px solid ${esUrgente ? '#ef4444' : '#8b5cf6'}`, background: 'linear-gradient(145deg, rgba(30,30,40,0.95), rgba(20,20,25,0.9))' }}>
+                      <div className={styles.cardHeader}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+                            <span className={styles.badge} style={{
+                              backgroundColor: 'rgba(139,92,246,0.15)', color: '#a78bfa',
+                              border: '1px solid rgba(139,92,246,0.2)',
+                            }}>{tipoLabel}</span>
+                            {esUrgente && (
+                              <span className={styles.badge} style={{
+                                backgroundColor: 'rgba(239,68,68,0.12)', color: '#ef4444',
+                                border: '1px solid rgba(239,68,68,0.2)',
+                              }}>⚠️ Próximo</span>
+                            )}
+                            {!prog.activo && (
+                              <span className={styles.badge} style={{
+                                backgroundColor: 'rgba(107,114,128,0.15)', color: '#6b7280',
+                                border: '1px solid rgba(107,114,128,0.2)',
+                              }}>Inactivo</span>
+                            )}
+                          </div>
+                          <h4 className={styles.cardTitle} style={{ fontSize: '1.1rem', marginBottom: '0.4rem' }}>{prog.nombre}</h4>
+                          {prog.descripcion && (
+                            <div style={{ fontSize: '0.8rem', color: '#9ca3af' }}>{prog.descripcion}</div>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
+                          <button onClick={() => prog.id && handleMarcarRealizado(prog.id)}
+                            title="Marcar como realizado"
+                            style={{ background: 'rgba(34, 197, 94, 0.1)', border: 'none', cursor: 'pointer', color: '#22c55e', width: '32px', height: '32px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>✅</button>
+                          <button onClick={() => prog.id && handleEliminarProgramacion(prog.id)}
+                            style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', cursor: 'pointer', color: '#ef4444', width: '32px', height: '32px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: proximoKm && proximaFecha ? '1fr 1fr' : '1fr', gap: '0.75rem', marginTop: '1rem', background: 'rgba(0,0,0,0.3)', padding: '0.875rem', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        {proximoKm !== null && (
+                          <div>
+                            <span style={{ display: 'block', fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.2rem' }}>Próximo a</span>
+                            <span style={{ fontSize: '1.1rem', fontWeight: '800', color: kmUrgente ? '#ef4444' : '#fff' }}>{proximoKm.toLocaleString()} <span style={{ fontSize: '0.7rem', color: '#4b5563' }}>km</span></span>
+                            {kmRestantes !== null && (
+                              <span style={{ display: 'block', fontSize: '0.75rem', color: kmUrgente ? '#ef4444' : '#6b7280', marginTop: '0.2rem' }}>
+                                {kmRestantes > 0 ? `Faltan ${kmRestantes.toLocaleString()} km` : `Pasado por ${Math.abs(kmRestantes).toLocaleString()} km`}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {proximaFecha !== null && (
+                          <div>
+                            <span style={{ display: 'block', fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.2rem' }}>Próxima fecha</span>
+                            <span style={{ fontSize: '1.1rem', fontWeight: '800', color: tiempoUrgente ? '#ef4444' : '#fff' }}>
+                              {proximaFecha.toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric' })}
+                            </span>
+                            {diasRestantes !== null && (
+                              <span style={{ display: 'block', fontSize: '0.75rem', color: tiempoUrgente ? '#ef4444' : '#6b7280', marginTop: '0.2rem' }}>
+                                {diasRestantes > 0 ? `Faltan ${diasRestantes} días` : `Pasado por ${Math.abs(diasRestantes)} días`}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Último realizado */}
+                      <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.875rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', fontSize: '0.8rem', color: '#9ca3af', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                        {prog.ultimoKmRealizado != null && prog.ultimoKmRealizado > 0 && (
+                          <span>Último: <span style={{ color: '#fff', fontWeight: '600' }}>{prog.ultimoKmRealizado.toLocaleString()} km</span></span>
+                        )}
+                        {prog.ultimaFechaRealizado && (
+                          <span>Fecha: <span style={{ color: '#fff', fontWeight: '600' }}>{new Date(prog.ultimaFechaRealizado).toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric' })}</span></span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {programaciones.length === 0 && (
+                  <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '4rem 2rem', background: 'rgba(255,255,255,0.02)', borderRadius: '24px', border: '2px dashed rgba(139,92,246,0.15)' }}>
+                    <div style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.4 }}>📅</div>
+                    <h3 style={{ color: '#fff', marginBottom: '0.5rem' }}>Sin programaciones de mantenimiento</h3>
+                    <p style={{ color: '#6b7280' }}>Programá cambios de aceite, revisiones y más para recibir alertas automáticas.</p>
                   </div>
                 )}
               </div>

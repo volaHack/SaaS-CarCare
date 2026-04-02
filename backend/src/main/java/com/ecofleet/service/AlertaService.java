@@ -2,6 +2,9 @@ package com.ecofleet.service;
 
 import com.ecofleet.model.*;
 import com.ecofleet.repository.*;
+
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +31,8 @@ public class AlertaService {
     @Autowired private RutaRepository rutaRepository;
     @Autowired private MantenimientoPreventivoRepository preventivoRepo;
     @Autowired private MantenimientoCorrectivoRepository correctivoRepo;
+    @Autowired private DocumentoVehiculoRepository documentoRepo;
+    @Autowired private ProgramacionMantenimientoRepository programacionRepo;
 
     // ═══════════════════════════════════════════════════════════════
     // SCHEDULER — corre cada 5 minutos
@@ -169,6 +174,177 @@ public class AlertaService {
                 resolverSiExiste("gps_" + r.getId());
                 resolverSiExiste("detenida_" + r.getId());
                 resolverSiExiste("desviada_" + r.getId());
+            }
+        }
+
+        // ── 4. Documentos por vencer / vencidos ─────────────────────────────
+        verificarDocumentos(empresaId, grupoKeysActivos);
+
+        // ── 5. Programaciones de mantenimiento (km + tiempo) ────────────────
+        verificarProgramaciones(empresaId, vehiculos, grupoKeysActivos);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // DOCUMENTOS — vencimiento a 30, 15, 7 días y vencido
+    // ═══════════════════════════════════════════════════════════════
+
+    private void verificarDocumentos(String empresaId, Set<String> grupoKeysActivos) {
+        LocalDate hoy = LocalDate.now();
+        LocalDate en30Dias = hoy.plusDays(30);
+
+        // Traer documentos que vencen dentro de 30 días o ya vencieron
+        List<DocumentoVehiculo> documentos = documentoRepo.findByEmpresaId(empresaId);
+
+        for (DocumentoVehiculo doc : documentos) {
+            if (doc.getFechaVencimiento() == null) continue;
+
+            LocalDate venc = doc.getFechaVencimiento();
+            long diasRestantes = ChronoUnit.DAYS.between(hoy, venc);
+            String info = doc.getVehiculoInfo() != null ? doc.getVehiculoInfo() : "Vehículo";
+            String tipoDoc = formatearTipoDocumento(doc.getTipoDocumento());
+
+            if (diasRestantes < 0) {
+                // VENCIDO
+                String key = "doc_vencido_" + doc.getId();
+                grupoKeysActivos.add(key);
+                crearSiNoExiste(key, empresaId, "DOCUMENTO_VENCIDO", "CRITICAL",
+                        tipoDoc + " vencido — " + info,
+                        String.format("%s venció hace %d día(s) (venc: %s)", tipoDoc, Math.abs(diasRestantes), venc),
+                        doc.getVehiculoId(), null, info);
+                // Resolver warning previo si lo había
+                resolverSiExiste("doc_warn_" + doc.getId());
+
+            } else if (diasRestantes <= 7) {
+                String key = "doc_warn_" + doc.getId();
+                grupoKeysActivos.add(key);
+                crearSiNoExiste(key, empresaId, "DOCUMENTO_POR_VENCER", "CRITICAL",
+                        tipoDoc + " vence en " + diasRestantes + " día(s) — " + info,
+                        String.format("%s vence el %s — renovar URGENTE", tipoDoc, venc),
+                        doc.getVehiculoId(), null, info);
+
+            } else if (diasRestantes <= 15) {
+                String key = "doc_warn_" + doc.getId();
+                grupoKeysActivos.add(key);
+                crearSiNoExiste(key, empresaId, "DOCUMENTO_POR_VENCER", "WARNING",
+                        tipoDoc + " vence en " + diasRestantes + " días — " + info,
+                        String.format("%s vence el %s — planificar renovación", tipoDoc, venc),
+                        doc.getVehiculoId(), null, info);
+
+            } else if (diasRestantes <= 30) {
+                String key = "doc_warn_" + doc.getId();
+                grupoKeysActivos.add(key);
+                crearSiNoExiste(key, empresaId, "DOCUMENTO_POR_VENCER", "INFO",
+                        tipoDoc + " vence en " + diasRestantes + " días — " + info,
+                        String.format("%s vence el %s", tipoDoc, venc),
+                        doc.getVehiculoId(), null, info);
+
+            } else {
+                // Documento vigente — resolver alertas previas
+                resolverSiExiste("doc_vencido_" + doc.getId());
+                resolverSiExiste("doc_warn_" + doc.getId());
+            }
+        }
+    }
+
+    private String formatearTipoDocumento(String tipo) {
+        if (tipo == null) return "Documento";
+        switch (tipo) {
+            case "ITV": return "ITV";
+            case "SEGURO": return "Seguro";
+            case "PERMISO_CIRCULACION": return "Permiso de Circulación";
+            case "TARJETA_TRANSPORTE": return "Tarjeta de Transporte";
+            default: return "Documento";
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // PROGRAMACIONES — mantenimiento por km y/o tiempo
+    // ═══════════════════════════════════════════════════════════════
+
+    private void verificarProgramaciones(String empresaId, List<Vehiculo> vehiculos, Set<String> grupoKeysActivos) {
+        List<ProgramacionMantenimiento> programaciones = programacionRepo.findByEmpresaIdAndActivoTrue(empresaId);
+        LocalDate hoy = LocalDate.now();
+
+        // Indexar vehículos por ID para lookup rápido
+        Map<String, Vehiculo> vehiculoMap = new HashMap<>();
+        for (Vehiculo v : vehiculos) vehiculoMap.put(v.getId(), v);
+
+        for (ProgramacionMantenimiento prog : programaciones) {
+            Vehiculo v = vehiculoMap.get(prog.getVehiculoId());
+            if (v == null) continue;
+
+            String info = prog.getVehiculoInfo() != null ? prog.getVehiculoInfo()
+                    : v.getMarca() + " " + v.getModelo() + " (" + v.getMatricula() + ")";
+            String nombre = prog.getNombre() != null ? prog.getNombre() : "Mantenimiento programado";
+
+            boolean alertaKm = false;
+            boolean alertaTiempo = false;
+            String severidadKm = null;
+            String severidadTiempo = null;
+            String descKm = "";
+            String descTiempo = "";
+
+            // ── Check por kilómetros ────────────────────────────────────
+            Double proximoKm = prog.getProximoKm();
+            if (proximoKm != null && v.getKilometraje() != null) {
+                double kmActual = v.getKilometraje();
+                double kmRestantes = proximoKm - kmActual;
+
+                if (kmRestantes <= 0) {
+                    alertaKm = true;
+                    severidadKm = "CRITICAL";
+                    descKm = String.format("Superó en %.0f km el límite (%,.0f km)", Math.abs(kmRestantes), proximoKm);
+                } else if (kmRestantes <= 1000) {
+                    alertaKm = true;
+                    severidadKm = "WARNING";
+                    descKm = String.format("Faltan %.0f km para el próximo (%,.0f km)", kmRestantes, proximoKm);
+                }
+            }
+
+            // ── Check por tiempo ────────────────────────────────────────
+            LocalDate proximaFecha = prog.getProximaFecha();
+            if (proximaFecha != null) {
+                long diasRestantes = ChronoUnit.DAYS.between(hoy, proximaFecha);
+
+                if (diasRestantes < 0) {
+                    alertaTiempo = true;
+                    severidadTiempo = "CRITICAL";
+                    descTiempo = String.format("Venció hace %d día(s) (fecha: %s)", Math.abs(diasRestantes), proximaFecha);
+                } else if (diasRestantes <= 15) {
+                    alertaTiempo = true;
+                    severidadTiempo = "WARNING";
+                    descTiempo = String.format("Faltan %d día(s) para la fecha programada (%s)", diasRestantes, proximaFecha);
+                }
+            }
+
+            // ── Generar alerta con la mayor severidad ───────────────────
+            String key = "prog_mant_" + prog.getId();
+
+            if (alertaKm || alertaTiempo) {
+                grupoKeysActivos.add(key);
+
+                // Elegir la mayor severidad entre km y tiempo
+                String severidad;
+                if ("CRITICAL".equals(severidadKm) || "CRITICAL".equals(severidadTiempo)) {
+                    severidad = "CRITICAL";
+                } else {
+                    severidad = "WARNING";
+                }
+
+                // Combinar descripciones
+                StringBuilder desc = new StringBuilder();
+                if (alertaKm) desc.append("KM: ").append(descKm);
+                if (alertaKm && alertaTiempo) desc.append(" | ");
+                if (alertaTiempo) desc.append("Tiempo: ").append(descTiempo);
+
+                String titulo = severidad.equals("CRITICAL")
+                        ? nombre + " vencido — " + info
+                        : nombre + " próximo — " + info;
+
+                crearSiNoExiste(key, empresaId, "MANTENIMIENTO_PROGRAMADO", severidad,
+                        titulo, desc.toString(), v.getId(), null, info);
+            } else {
+                resolverSiExiste(key);
             }
         }
     }

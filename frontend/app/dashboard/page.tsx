@@ -1385,6 +1385,8 @@ export default function Dashboard() {
                         const rankColors = ['#f59e0b', '#94a3b8', '#cd7f32'];
                         const rankBorder = idx < 3 ? rankColors[idx] : 'rgba(255,255,255,0.08)';
                         const isTop = idx === 0;
+                        const vData = vehiculos.find(veh => veh.id === v.vehiculoId);
+                        const refKm = vData?.costeKmReferencia ?? null;
 
                         return (
                           <div
@@ -1438,18 +1440,34 @@ export default function Dashboard() {
                               </div>
                             </div>
 
-                            <div className={styles.statRow}>
-                              <span className={styles.statLabel}>Coste/Km</span>
-                              <span className={styles.statValue} style={{
-                                color: v.costePorKm > (flotaKpis?.costePorKmFlota || 0) ? '#ef4444' : '#22c55e',
-                                fontWeight: '700'
-                              }}>
-                                €{v.costePorKm.toFixed(2)}/km
-                                {v.costePorKm > (flotaKpis?.costePorKmFlota || 0)
-                                  ? <span style={{ marginLeft: '0.4rem', fontSize: '0.7rem', background: 'rgba(239,68,68,0.1)', padding: '2px 6px', borderRadius: '6px' }}>↑ sobre media</span>
-                                  : <span style={{ marginLeft: '0.4rem', fontSize: '0.7rem', background: 'rgba(34,197,94,0.1)', padding: '2px 6px', borderRadius: '6px' }}>✓ eficiente</span>
-                                }
-                              </span>
+                            <div className={styles.statRow} style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.4rem' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                                <span className={styles.statLabel}>Coste/Km real</span>
+                                <span className={styles.statValue} style={{
+                                  color: v.costePorKm === 0 ? '#6b7280' : (v.costePorKm > (flotaKpis?.costePorKmFlota || 0) ? '#ef4444' : '#22c55e'),
+                                  fontWeight: '700'
+                                }}>
+                                  {v.costePorKm === 0 ? '—' : `€${v.costePorKm.toFixed(3)}/km`}
+                                  {v.costePorKm > 0 && (
+                                    v.costePorKm > (flotaKpis?.costePorKmFlota || 0)
+                                      ? <span style={{ marginLeft: '0.4rem', fontSize: '0.7rem', background: 'rgba(239,68,68,0.1)', padding: '2px 6px', borderRadius: '6px' }}>↑ sobre media</span>
+                                      : <span style={{ marginLeft: '0.4rem', fontSize: '0.7rem', background: 'rgba(34,197,94,0.1)', padding: '2px 6px', borderRadius: '6px' }}>✓ eficiente</span>
+                                  )}
+                                </span>
+                              </div>
+                              {refKm !== null && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '0.4rem 0.6rem', background: 'rgba(167,139,250,0.07)', borderRadius: '8px', border: '1px solid rgba(167,139,250,0.15)' }}>
+                                  <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Ref. presupuestada</span>
+                                  <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#a78bfa', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                    €{refKm.toFixed(3)}/km
+                                    {v.costePorKm > 0 && (
+                                      v.costePorKm > refKm
+                                        ? <span style={{ fontSize: '0.65rem', background: 'rgba(239,68,68,0.15)', color: '#f87171', padding: '1px 5px', borderRadius: '5px' }}>+€{(v.costePorKm - refKm).toFixed(3)}</span>
+                                        : <span style={{ fontSize: '0.65rem', background: 'rgba(34,197,94,0.15)', color: '#4ade80', padding: '1px 5px', borderRadius: '5px' }}>−€{(refKm - v.costePorKm).toFixed(3)}</span>
+                                    )}
+                                  </span>
+                                </div>
+                              )}
                             </div>
 
                             <div className={styles.statRow}>
