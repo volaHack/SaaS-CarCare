@@ -201,6 +201,8 @@ export default function VehiculoDetalle() {
           ...nuevoRepostaje,
           vehiculoId: id,
           costeTotal,
+          // LocalDateTime en el backend requiere formato con hora — "2026-04-02" sola da 400
+          fecha: nuevoRepostaje.fecha ? `${nuevoRepostaje.fecha}T00:00:00` : undefined,
           kilometrajeActual: nuevoRepostaje.kilometrajeActual && nuevoRepostaje.kilometrajeActual > 0
             ? nuevoRepostaje.kilometrajeActual : undefined,
         }),
@@ -215,7 +217,11 @@ export default function VehiculoDetalle() {
           fecha: new Date().toISOString().split("T")[0],
         });
       } else {
-        toast.error("Error al registrar repostaje");
+        const errBody = await res.text().catch(() => '');
+        if (res.status === 403) toast.error("Sin permiso para este vehículo");
+        else if (res.status === 400) toast.error("Datos inválidos — revisá los campos");
+        else toast.error(`Error al registrar repostaje (${res.status})`);
+        console.error('Repostaje error:', res.status, errBody);
       }
     } catch { toast.error("Error de conexión"); }
   };
