@@ -209,9 +209,14 @@ export default function ConductorDashboard() {
                 setShowRefuelForm(false);
                 setRefuelData({ vehiculoId: '', litros: '', precioPorLitro: '1.650', estacion: '', kmActual: '' });
             } else {
-                toast.error("Error al registrar repostaje");
+                const body = await res.text().catch(() => '');
+                if (res.status === 403) toast.error("Sin permiso para este vehículo");
+                else if (res.status === 404) toast.error("Vehículo no encontrado en el sistema");
+                else if (res.status === 400) toast.error("Datos incompletos — revisá los campos");
+                else toast.error(`Error al registrar repostaje (${res.status})`);
+                console.error('Repostaje error:', res.status, body);
             }
-        } catch { toast.error("Error de conexión"); }
+        } catch { toast.error("Error de conexión — revisá tu internet"); }
     };
 
     const completarRuta = async (ruta: Ruta) => {
@@ -502,9 +507,10 @@ export default function ConductorDashboard() {
 
                                         {showRefuelForm && (
                                             <div style={{ marginTop: '0.75rem', background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '16px', padding: '1.1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                                {vehiculosUnicos.length > 1 && (
-                                                    <div>
-                                                        <label style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>Vehículo</label>
+                                                {/* Selector de vehículo — siempre visible */}
+                                                <div>
+                                                    <label style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>Vehículo</label>
+                                                    {vehiculosUnicos.length > 0 ? (
                                                         <select
                                                             value={refuelData.vehiculoId}
                                                             onChange={e => setRefuelData(d => ({ ...d, vehiculoId: e.target.value }))}
@@ -515,8 +521,16 @@ export default function ConductorDashboard() {
                                                                 <option key={vid} value={vid}>{vid}</option>
                                                             ))}
                                                         </select>
-                                                    </div>
-                                                )}
+                                                    ) : (
+                                                        <input
+                                                            type="text"
+                                                            placeholder="ID del vehículo (consultá al admin)"
+                                                            value={refuelData.vehiculoId}
+                                                            onChange={e => setRefuelData(d => ({ ...d, vehiculoId: e.target.value }))}
+                                                            style={{ width: '100%', padding: '0.65rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#fff', fontSize: '0.85rem', boxSizing: 'border-box' }}
+                                                        />
+                                                    )}
+                                                </div>
 
                                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
                                                     <div>

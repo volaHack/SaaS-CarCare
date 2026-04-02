@@ -55,7 +55,7 @@ public class RepostajeController {
         if (vehiculoOpt.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
-        if (!vehiculoOpt.get().getUsuarioId().equals(usuarioId)) {
+        if (!usuarioId.equals(vehiculoOpt.get().getUsuarioId())) {
             return ResponseEntity.status(403).body("Acceso denegado");
         }
 
@@ -87,7 +87,7 @@ public class RepostajeController {
             return ResponseEntity.notFound().build();
         }
         Vehiculo vehiculo = vehiculoOpt.get();
-        if (!vehiculo.getUsuarioId().equals(usuarioId)) {
+        if (!usuarioId.equals(vehiculo.getUsuarioId())) {
             return ResponseEntity.status(403).body("Acceso denegado: el vehículo no pertenece a esta empresa");
         }
 
@@ -160,7 +160,7 @@ public class RepostajeController {
         // Verificar propiedad a través del vehículo
         if (repostaje.getVehiculoId() != null) {
             Optional<Vehiculo> vehiculoOpt = vehiculoRepository.findById(repostaje.getVehiculoId());
-            if (vehiculoOpt.isPresent() && !vehiculoOpt.get().getUsuarioId().equals(usuarioId)) {
+            if (vehiculoOpt.isPresent() && !usuarioId.equals(vehiculoOpt.get().getUsuarioId())) {
                 return ResponseEntity.status(403).body("Acceso denegado");
             }
         }
