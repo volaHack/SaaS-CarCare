@@ -8,6 +8,9 @@ import BackgroundMeteors from "@/componentes/BackgroundMeteors";
 import LocationInput from "@/componentes/LocationInput";
 import AlertasPanel from "@/componentes/AlertasPanel";
 import ConfiguracionPanel from "@/componentes/ConfiguracionPanel";
+import LanguageSwitcher from "@/componentes/LanguageSwitcher";
+import WavyButton from "@/components/ui/wavy-button";
+import { useTranslation } from "@/lib/i18n";
 import dynamic from "next/dynamic";
 import {
   XAxis,
@@ -129,6 +132,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-product
 
 export default function Dashboard() {
   const router = useRouter();
+  const t = useTranslation();
 
   const [activeTab, setActiveTab] = useState<'flota' | 'nuevo' | 'rutas' | 'estadisticas' | 'tracking' | 'costes'>('flota');
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
@@ -558,8 +562,8 @@ export default function Dashboard() {
         <div className={styles.container}>
           <header className={styles.header}>
             <div className={styles.title}>
-              <h1>./CarCare Tracker</h1>
-              <p className={styles.subtitle}>Gestion de Flota de mano de CarCare Tracker para la Organización y Sostenibilidad de la flota de coches de una empresa</p>
+              <h1>{t.dashboard.title}</h1>
+              <p className={styles.subtitle}>{t.dashboard.subtitle}</p>
             </div>
             <div className={styles.status} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginLeft: 'auto' }}>
               <AlertasPanel
@@ -571,17 +575,15 @@ export default function Dashboard() {
                 }}
               />
               <ConfiguracionPanel apiUrl={API_URL} getAuthHeaders={getAuthHeaders} />
-              <button
+              <LanguageSwitcher />
+              <WavyButton
+                variant="outline"
+                size="sm"
+                radius="sm"
                 onClick={handleLogout}
-                className={styles.submitButton}
-                style={{
-                  width: 'auto',
-                  padding: '0.5rem 1.5rem',
-                  fontSize: '0.875rem'
-                }}
               >
-                Cerrar Sesión
-              </button>
+                {t.auth.logout}
+              </WavyButton>
             </div>
           </header>
 
@@ -590,13 +592,13 @@ export default function Dashboard() {
               className={`${styles.navButton} ${activeTab === 'flota' ? styles.activeTab : ''}`}
               onClick={() => setActiveTab('flota')}
             >
-              Flota de coches
+              {t.nav.fleet}
             </button>
             <button
               className={`${styles.navButton} ${activeTab === 'rutas' ? styles.activeTab : ''}`}
               onClick={() => setActiveTab('rutas')}
             >
-              Rutas y Logística
+              {t.nav.routes}
             </button>
             <button
               className={`${styles.navButton} ${activeTab === 'costes' ? styles.activeTab : ''}`}
@@ -612,25 +614,25 @@ export default function Dashboard() {
                 }
               }}
             >
-              Costes & ROI
+              {t.nav.costs}
             </button>
             <button
               className={`${styles.navButton} ${activeTab === 'estadisticas' ? styles.activeTab : ''}`}
               onClick={() => setActiveTab('estadisticas')}
             >
-              Estadísticas
+              {t.nav.statistics}
             </button>
             <button
               className={`${styles.navButton} ${activeTab === 'tracking' ? styles.activeTab : ''}`}
               onClick={() => setActiveTab('tracking')}
             >
-              Tracking en Vivo
+              {t.nav.tracking}
             </button>
             <button
               className={`${styles.navButton} ${activeTab === 'nuevo' ? styles.activeTab : ''}`}
               onClick={() => setActiveTab('nuevo')}
             >
-              + Nuevo Vehículo
+              {t.nav.newVehicle}
             </button>
           </nav>
 
@@ -829,7 +831,7 @@ export default function Dashboard() {
                     <span style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '0.25rem', display: 'block' }}>€/km presupuestado — referencia para evaluar eficiencia real</span>
                   </div>
                 </div>
-                <button type="submit" className={styles.submitButton}>Guardar Vehículo</button>
+                <WavyButton type="submit" variant="success" radius="sm" className="w-full">{t.vehicle.saveVehicle}</WavyButton>
               </form>
             </div>
           )}
@@ -913,7 +915,7 @@ export default function Dashboard() {
                       ))}
                     </select>
                   </div>
-                  <button type="submit" className={styles.submitButton}>Planificar Ruta</button>
+                  <WavyButton type="submit" variant="success" radius="sm" className="w-full">{t.routes.planRoute}</WavyButton>
                 </form>
               </div>
 

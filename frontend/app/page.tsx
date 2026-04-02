@@ -4,7 +4,9 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./landing/landing.module.css";
 import BackgroundMeteors from "@/componentes/BackgroundMeteors";
-
+import LanguageSwitcher from "@/componentes/LanguageSwitcher";
+import WavyButton from "@/components/ui/wavy-button";
+import { useTranslation } from "@/lib/i18n";
 // SVG Icons
 const CarIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -101,6 +103,7 @@ const AndroidIcon = () => (
 
 export default function LandingPage() {
   const router = useRouter();
+  const t = useTranslation();
   const [isVisible, setIsVisible] = useState(false);
   const [scrollY, setScrollY] = useState(0);
 
@@ -213,15 +216,18 @@ export default function LandingPage() {
             <span className={styles.logoText}>./CarCare Tracker</span>
           </div>
           <div className={styles.navLinks}>
-            <a href="#features" className={styles.navLink}>Características</a>
-            <a href="#how-it-works" className={styles.navLink}>Cómo Funciona</a>
-            <a href="#download" className={styles.navLink}>Descargar</a>
-            <button
-              className={styles.navCta}
+            <a href="#features" className={styles.navLink}>{t.landing.features}</a>
+            <a href="#how-it-works" className={styles.navLink}>{t.landing.howItWorks}</a>
+            <a href="#download" className={styles.navLink}>{t.landing.download}</a>
+            <LanguageSwitcher />
+            <WavyButton
+              variant="default"
+              size="sm"
+              radius="sm"
               onClick={() => router.push('/login')}
             >
-              Iniciar Sesión
-            </button>
+              {t.landing.primaryCta}
+            </WavyButton>
           </div>
           {/* Botón CTA móvil */}
           <button
@@ -241,27 +247,27 @@ export default function LandingPage() {
           </div>
 
           <h1 className={styles.heroTitle}>
-            Gestiona tu flota
-            <span className={styles.gradientText}> con inteligencia</span>
+            {t.landing.heroTitle}
+            <span className={styles.gradientText}> {t.landing.heroTitleHighlight}</span>
           </h1>
 
           <p className={styles.heroSubtitle}>
-            CarCare Tracker es la solución completa para empresas que quieren
-            optimizar sus flotas, reducir costes y tener control total sobre
-            sus vehículos y conductores en tiempo real.
+            {t.landing.heroSubtitle}
           </p>
 
           <div className={styles.heroCtas}>
-            <button
-              className={styles.primaryCta}
+            <WavyButton
+              variant="success"
+              size="lg"
+              radius="sm"
               onClick={() => router.push('/login')}
             >
-              <span>Iniciar Sesión</span>
+              <span>{t.landing.primaryCta}</span>
               <span className={styles.ctaArrow}><ArrowRightIcon /></span>
-            </button>
+            </WavyButton>
             <a href="#download" className={styles.secondaryCta}>
               <span className={styles.androidIcon}><AndroidIcon /></span>
-              <span>Descargar para Android</span>
+              <span>{t.landing.downloadCta}</span>
             </a>
           </div>
 
@@ -761,13 +767,15 @@ export default function LandingPage() {
               Panel web para la empresa, app Android para los conductores.
               Todo conectado en tiempo real, desde el primer momento.
             </p>
-            <button
-              className={styles.ctaButton}
+            <WavyButton
+              variant="success"
+              size="lg"
+              radius="sm"
               onClick={() => router.push('/login')}
             >
-              <span>Comenzar Ahora</span>
+              <span>{t.landing.startNow}</span>
               <span className={styles.ctaArrow}><ArrowRightIcon /></span>
-            </button>
+            </WavyButton>
             <div className={styles.ctaTrustLine}>
               <span className={styles.ctaTrustItem}>
                 <CheckIcon /> Registro en minutos
