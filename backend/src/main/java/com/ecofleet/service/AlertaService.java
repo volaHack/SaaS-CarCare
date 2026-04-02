@@ -98,6 +98,25 @@ public class AlertaService {
             }
         }
 
+        // 2. Combustible bajo (< 20%)
+        for (Vehiculo v : vehiculos) {
+            if (v.getCombustibleActual() == null) continue;
+            String info = v.getMarca() + " " + v.getModelo() + " (" + v.getMatricula() + ")";
+            double pct = v.getCombustibleActual();
+            String key = "combustible_bajo_" + v.getId();
+
+            if (pct < 20.0) {
+                grupoKeysActivos.add(key);
+                String severidad = pct < 10.0 ? "CRITICAL" : "WARNING";
+                crearSiNoExiste(key, empresaId, "COMBUSTIBLE_BAJO", severidad,
+                        "Combustible bajo — " + info,
+                        String.format("Nivel de combustible al %.1f%% — repostaje necesario", pct),
+                        v.getId(), null, info);
+            } else {
+                resolverSiExiste(key);
+            }
+        }
+
         for (Ruta r : rutas) {
             if (r.getEstado() == null) continue;
             String label = r.getOrigen() + " → " + r.getDestino();

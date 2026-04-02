@@ -117,10 +117,15 @@ public class RepostajeController {
         // ── Actualizar vehículo ──────────────────────────────────────────────
         boolean vehiculoModificado = false;
 
-        // 1. Sumar litros al combustible actual
+        // 1. Actualizar nivel de combustible como porcentaje (0–100%)
+        //    Se convierte: litros / capacidadDeposito * 100 → % ganado
+        //    Si no se conoce la capacidad, se asume 60L (valor típico de flota)
         if (repostaje.getLitros() != null && repostaje.getLitros() > 0) {
-            double combustibleActual = vehiculo.getCombustibleActual() != null ? vehiculo.getCombustibleActual() : 0;
-            vehiculo.setCombustibleActual(combustibleActual + repostaje.getLitros());
+            double capacidad = vehiculo.getCapacidadDeposito() != null ? vehiculo.getCapacidadDeposito() : 60.0;
+            double pctActual = vehiculo.getCombustibleActual() != null ? vehiculo.getCombustibleActual() : 0.0;
+            double pctGanado = (repostaje.getLitros() / capacidad) * 100.0;
+            double nuevoPct = Math.min(100.0, Math.round((pctActual + pctGanado) * 10.0) / 10.0);
+            vehiculo.setCombustibleActual(nuevoPct);
             vehiculoModificado = true;
         }
 

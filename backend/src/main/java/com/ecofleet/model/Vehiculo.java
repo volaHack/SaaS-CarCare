@@ -16,7 +16,9 @@ public class Vehiculo {
     private String modelo;
     private String marca;
     private Double kilometraje;
-    private Double combustibleActual;
+    private Double combustibleActual;   // Porcentaje del depósito (0–100%)
+    private Double capacidadDeposito;   // Litros totales del depósito (ej: 60L)
+    private Double consumoPor100km;     // Litros consumidos por cada 100 km (ej: 8.0)
     private String tipoCombustible;
     
     

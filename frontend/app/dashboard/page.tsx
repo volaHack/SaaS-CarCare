@@ -31,7 +31,9 @@ interface Vehiculo {
   modelo: string;
   kilometraje: number;
   tipoCombustible: string;
-  combustibleActual: number;
+  combustibleActual: number;  // Porcentaje (0–100%)
+  capacidadDeposito?: number; // Litros totales del depósito (ej: 60)
+  consumoPor100km?: number;   // L/100km (ej: 8.0)
   activo: boolean;
 }
 
@@ -668,8 +670,8 @@ export default function Dashboard() {
                   </div>
 
                   <div className={styles.statRow}>
-                    <span className={styles.statLabel}>Combustible actual</span>
-                    <span className={styles.statValue}>{v.combustibleActual?.toLocaleString('es-ES', { maximumFractionDigits: 1 })} L</span>
+                    <span className={styles.statLabel}>Combustible</span>
+                    <span className={styles.statValue} style={{ color: v.combustibleActual != null && v.combustibleActual < 20 ? '#ef4444' : undefined }}>{v.combustibleActual?.toLocaleString('es-ES', { maximumFractionDigits: 1 })}%</span>
                   </div>
 
                   {(() => {
@@ -805,6 +807,22 @@ export default function Dashboard() {
                       <option value="hibrido">Híbrido</option>
                       <option value="electrico">Eléctrico</option>
                     </select>
+                  </div>
+                  <div className={styles.formGroup}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <label className={styles.label} style={{ marginBottom: 0 }}>Capacidad depósito</label>
+                      <span style={{ fontWeight: 'bold', color: '#6b7280' }}>{nuevoVehiculo.capacidadDeposito || 60} L</span>
+                    </div>
+                    <input className={styles.input} type="number" min="10" max="500" step="5" placeholder="60"
+                      value={nuevoVehiculo.capacidadDeposito || ''} onChange={e => setNuevoVehiculo({ ...nuevoVehiculo, capacidadDeposito: Number(e.target.value) || undefined })} />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <label className={styles.label} style={{ marginBottom: 0 }}>Consumo estimado</label>
+                      <span style={{ fontWeight: 'bold', color: '#6b7280' }}>{nuevoVehiculo.consumoPor100km || 8} L/100km</span>
+                    </div>
+                    <input className={styles.input} type="number" min="1" max="50" step="0.5" placeholder="8.0"
+                      value={nuevoVehiculo.consumoPor100km || ''} onChange={e => setNuevoVehiculo({ ...nuevoVehiculo, consumoPor100km: Number(e.target.value) || undefined })} />
                   </div>
                 </div>
                 <button type="submit" className={styles.submitButton}>Guardar Vehículo</button>

@@ -133,8 +133,25 @@ public class RutaController {
 
                             final double kmFinal = kmAñadir;
                             vehiculoRepository.findById(ruta.getVehiculoId()).ifPresent(vehiculo -> {
+                                // Actualizar kilometraje
                                 double kmActuales = vehiculo.getKilometraje() != null ? vehiculo.getKilometraje() : 0;
                                 vehiculo.setKilometraje(kmActuales + kmFinal);
+
+                                // Descontar combustible consumido
+                                // consumo = km × (consumoPor100km / 100) / capacidadDeposito × 100
+                                // Defaults: 8L/100km, 60L de depósito
+                                if (vehiculo.getCombustibleActual() != null) {
+                                    double consumo = vehiculo.getConsumoPor100km() != null ? vehiculo.getConsumoPor100km() : 8.0;
+                                    double capacidad = vehiculo.getCapacidadDeposito() != null ? vehiculo.getCapacidadDeposito() : 60.0;
+                                    double litrosConsumidos = kmFinal * consumo / 100.0;
+                                    double pctConsumido = (litrosConsumidos / capacidad) * 100.0;
+                                    double pctAnterior = vehiculo.getCombustibleActual();
+                                    double nuevoPct = Math.max(0.0, Math.round((pctAnterior - pctConsumido) * 10.0) / 10.0);
+                                    vehiculo.setCombustibleActual(nuevoPct);
+                                    System.out.printf("[RutaController] ⛽ Combustible vehículo %s: %.1f%% → %.1f%% (−%.1f L en %.1f km)%n",
+                                            vehiculo.getMatricula(), pctAnterior, nuevoPct, litrosConsumidos, kmFinal);
+                                }
+
                                 vehiculoRepository.save(vehiculo);
                                 System.out.printf("[RutaController] ✅ Km actualizados vehículo %s: %.1f → %.1f km%n",
                                         vehiculo.getMatricula(), kmActuales, kmActuales + kmFinal);

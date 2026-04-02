@@ -13,7 +13,9 @@ interface Vehiculo {
   modelo: string;
   kilometraje: number;
   tipoCombustible: string;
-  combustibleActual: number;
+  combustibleActual: number;  // Porcentaje (0–100%)
+  capacidadDeposito?: number; // Litros totales del depósito
+  consumoPor100km?: number;   // L/100km
   activo: boolean;
 }
 
@@ -242,9 +244,7 @@ export default function VehiculoDetalle() {
   const litrosTotales = repostajes.reduce((sum, r) => sum + (r.litros || 0), 0);
   const costoTotalVehiculo = costoTotalMantenimiento + costoTotalCombustible;
 
-  const ultimoRepostaje = repostajes.length > 0
-    ? repostajes.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))[0]
-    : null;
+
 
   const costeTotal = nuevoRepostaje.litros && nuevoRepostaje.precioPorLitro
     ? Math.round((nuevoRepostaje.litros * nuevoRepostaje.precioPorLitro) * 100) / 100
@@ -296,8 +296,8 @@ export default function VehiculoDetalle() {
 
               <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <span style={{ display: 'block', fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.3rem' }}>Combustible</span>
-                <span style={{ fontSize: '1.5rem', fontWeight: '800', color: '#f59e0b' }}>{vehiculo.combustibleActual?.toLocaleString('es-ES', { maximumFractionDigits: 1 })}</span>
-                <span style={{ fontSize: '0.75rem', color: '#4b5563', marginLeft: '0.3rem' }}>L</span>
+                <span style={{ fontSize: '1.5rem', fontWeight: '800', color: vehiculo.combustibleActual != null && vehiculo.combustibleActual < 20 ? '#ef4444' : '#f59e0b' }}>{vehiculo.combustibleActual?.toLocaleString('es-ES', { maximumFractionDigits: 1 })}</span>
+                <span style={{ fontSize: '0.75rem', color: '#4b5563', marginLeft: '0.3rem' }}>%</span>
               </div>
 
               <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(255,255,255,0.06)' }}>
