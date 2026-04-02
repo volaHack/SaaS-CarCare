@@ -668,9 +668,30 @@ export default function Dashboard() {
                   </div>
 
                   <div className={styles.statRow}>
-                    <span className={styles.statLabel}>Combustible</span>
-                    <span className={styles.statValue}>{v.combustibleActual} L</span>
+                    <span className={styles.statLabel}>Combustible actual</span>
+                    <span className={styles.statValue}>{v.combustibleActual?.toLocaleString('es-ES', { maximumFractionDigits: 1 })} L</span>
                   </div>
+
+                  {(() => {
+                    const repVehiculo = repostajes.filter(r => r.vehiculoId === v.id);
+                    if (repVehiculo.length === 0) return null;
+                    const totalComb = repVehiculo.reduce((sum, r) => sum + (r.costeTotal || 0), 0);
+                    const ultimo = repVehiculo.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))[0];
+                    return (
+                      <>
+                        <div className={styles.statRow}>
+                          <span className={styles.statLabel}>Gasto en combustible</span>
+                          <span className={styles.statValue} style={{ color: '#f59e0b' }}>€{totalComb.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className={styles.statRow}>
+                          <span className={styles.statLabel}>Último repostaje</span>
+                          <span className={styles.statValue} style={{ fontSize: '0.85rem', color: '#9ca3af' }}>
+                            {new Date(ultimo.fecha!).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                          </span>
+                        </div>
+                      </>
+                    );
+                  })()}
 
                   <div className={styles.fuelBarBg}>
                     <div
