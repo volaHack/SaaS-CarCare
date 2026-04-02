@@ -2,8 +2,10 @@ package com.ecofleet.controller;
 
 import com.ecofleet.model.Conductor;
 import com.ecofleet.model.Ruta;
+import com.ecofleet.model.Vehiculo;
 import com.ecofleet.repository.ConductorRepository;
 import com.ecofleet.repository.RutaRepository;
+import com.ecofleet.repository.VehiculoRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -23,6 +25,9 @@ public class RutaController {
 
     @Autowired
     private ConductorRepository conductorRepository;
+
+    @Autowired
+    private VehiculoRepository vehiculoRepository;
 
     @GetMapping
     public List<Ruta> listarRutas(HttpServletRequest request) {
@@ -94,10 +99,46 @@ public class RutaController {
                     }
                     
                     if (rutaActualizada.getEstado() != null) {
+                        String estadoAnterior = ruta.getEstado();
                         ruta.setEstado(rutaActualizada.getEstado());
-                        // Resetear detención al cambiar estado manualmente
+
+                        // Resetear detención al reanudar manualmente
                         if ("EN_CURSO".equals(rutaActualizada.getEstado())) {
                             ruta.setInicioDetencion(null);
+                        }
+
+                        // ─── AUTO-UPDATE KILOMETRAJE DEL VEHÍCULO AL COMPLETAR ───────────
+                        // Solo si la transición ES a COMPLETADA (evitar doble conteo)
+                        if ("COMPLETADA".equals(rutaActualizada.getEstado())
+                                && !"COMPLETADA".equals(estadoAnterior)
+                                && ruta.getVehiculoId() != null
+                                && ruta.getDistanciaEstimadaKm() != null) {
+
+                            double kmAñadir = ruta.getDistanciaEstimadaKm();
+
+                            // Si el GPS estuvo activo, usar la distancia real recorrida
+                            // (estimada - restante). Si la restante es < 10% del total, asumir ruta completa.
+                            if (ruta.getDistanciaRestanteKm() != null
+                                    && ruta.getDistanciaRestanteKm() >= 0
+                                    && ruta.getDistanciaRestanteKm() < ruta.getDistanciaEstimadaKm()) {
+                                double restante = ruta.getDistanciaRestanteKm();
+                                if (restante <= ruta.getDistanciaEstimadaKm() * 0.10) {
+                                    // Llegó al destino (GPS) — sumar km totales estimados
+                                    kmAñadir = ruta.getDistanciaEstimadaKm();
+                                } else {
+                                    // Paró antes del destino — sumar solo lo recorrido según GPS
+                                    kmAñadir = ruta.getDistanciaEstimadaKm() - restante;
+                                }
+                            }
+
+                            final double kmFinal = kmAñadir;
+                            vehiculoRepository.findById(ruta.getVehiculoId()).ifPresent(vehiculo -> {
+                                double kmActuales = vehiculo.getKilometraje() != null ? vehiculo.getKilometraje() : 0;
+                                vehiculo.setKilometraje(kmActuales + kmFinal);
+                                vehiculoRepository.save(vehiculo);
+                                System.out.printf("[RutaController] ✅ Km actualizados vehículo %s: %.1f → %.1f km%n",
+                                        vehiculo.getMatricula(), kmActuales, kmActuales + kmFinal);
+                            });
                         }
                     }
                     

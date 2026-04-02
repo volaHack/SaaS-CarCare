@@ -41,6 +41,8 @@ export default function ConductorDashboard() {
     const router = useRouter();
     const gpsWatchIdRef = useRef<number | null>(null);
     const [gpsInterval, setGpsInterval] = useState<NodeJS.Timeout | null>(null);
+    const [showRefuelForm, setShowRefuelForm] = useState(false);
+    const [refuelData, setRefuelData] = useState({ vehiculoId: '', litros: '', precioPorLitro: '1.650', estacion: '', kmActual: '' });
 
     const getAuthHeaders = (): Record<string, string> => {
         const headers: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
@@ -179,6 +181,37 @@ export default function ConductorDashboard() {
             cargarRutas();
             toast.success(nuevoEstado === 'EN_CURSO' ? 'Trayecto iniciado' : 'Trayecto pausado');
         } catch { toast.error("Error al actualizar estado"); }
+    };
+
+    const registrarRepostaje = async () => {
+        const litros = parseFloat(refuelData.litros);
+        const precio = parseFloat(refuelData.precioPorLitro);
+        if (!refuelData.vehiculoId) { toast.warning("Seleccioná el vehículo"); return; }
+        if (!litros || litros <= 0) { toast.warning("Ingresá la cantidad de litros"); return; }
+        if (!precio || precio <= 0) { toast.warning("Ingresá el precio por litro"); return; }
+        const costeTotal = Math.round(litros * precio * 100) / 100;
+        try {
+            const payload: Record<string, unknown> = {
+                vehiculoId: refuelData.vehiculoId,
+                litros,
+                precioPorLitro: precio,
+                costeTotal,
+                estacion: refuelData.estacion || undefined,
+                kilometrajeActual: refuelData.kmActual ? parseInt(refuelData.kmActual) : undefined,
+            };
+            const res = await fetch(`${API_URL}/api/repostajes`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify(payload),
+            });
+            if (res.ok) {
+                toast.success(`Repostaje registrado — €${costeTotal.toFixed(2)}`);
+                setShowRefuelForm(false);
+                setRefuelData({ vehiculoId: '', litros: '', precioPorLitro: '1.650', estacion: '', kmActual: '' });
+            } else {
+                toast.error("Error al registrar repostaje");
+            }
+        } catch { toast.error("Error de conexión"); }
     };
 
     const completarRuta = async (ruta: Ruta) => {
@@ -445,6 +478,97 @@ export default function ConductorDashboard() {
                                     </div>
                                 </div>
                             )}
+
+                            {/* REGISTRAR REPOSTAJE */}
+                            {(() => {
+                                const vehiculosUnicos = [...new Set(
+                                    [...rutas, ...rutasCompletadas].map(r => r.vehiculoId).filter(Boolean)
+                                )];
+                                const costePreview = parseFloat(refuelData.litros) > 0 && parseFloat(refuelData.precioPorLitro) > 0
+                                    ? Math.round(parseFloat(refuelData.litros) * parseFloat(refuelData.precioPorLitro) * 100) / 100
+                                    : 0;
+                                return (
+                                    <div>
+                                        <button
+                                            onClick={() => {
+                                                const v = rutaActiva?.vehiculoId || vehiculosUnicos[0] || '';
+                                                setRefuelData(d => ({ ...d, vehiculoId: v }));
+                                                setShowRefuelForm(!showRefuelForm);
+                                            }}
+                                            style={{ width: '100%', padding: '1rem', background: showRefuelForm ? 'rgba(255,255,255,0.05)' : 'rgba(245,158,11,0.08)', border: `1px solid ${showRefuelForm ? 'rgba(255,255,255,0.12)' : 'rgba(245,158,11,0.25)'}`, borderRadius: '14px', color: showRefuelForm ? '#9ca3af' : '#f59e0b', fontWeight: '800', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', letterSpacing: '0.5px', transition: 'all 0.2s' }}
+                                        >
+                                            {showRefuelForm ? '✕ Cancelar' : '⛽ Registrar Repostaje'}
+                                        </button>
+
+                                        {showRefuelForm && (
+                                            <div style={{ marginTop: '0.75rem', background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '16px', padding: '1.1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                                {vehiculosUnicos.length > 1 && (
+                                                    <div>
+                                                        <label style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>Vehículo</label>
+                                                        <select
+                                                            value={refuelData.vehiculoId}
+                                                            onChange={e => setRefuelData(d => ({ ...d, vehiculoId: e.target.value }))}
+                                                            style={{ width: '100%', padding: '0.6rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#fff', fontSize: '0.85rem' }}
+                                                        >
+                                                            <option value="">Seleccioná un vehículo</option>
+                                                            {vehiculosUnicos.map(vid => (
+                                                                <option key={vid} value={vid}>{vid}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                )}
+
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+                                                    <div>
+                                                        <label style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>Litros</label>
+                                                        <input type="number" step="0.1" min="0.1" placeholder="45.0"
+                                                            value={refuelData.litros}
+                                                            onChange={e => setRefuelData(d => ({ ...d, litros: e.target.value }))}
+                                                            style={{ width: '100%', padding: '0.65rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }} />
+                                                    </div>
+                                                    <div>
+                                                        <label style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>€/Litro</label>
+                                                        <input type="number" step="0.001" min="0.001" placeholder="1.650"
+                                                            value={refuelData.precioPorLitro}
+                                                            onChange={e => setRefuelData(d => ({ ...d, precioPorLitro: e.target.value }))}
+                                                            style={{ width: '100%', padding: '0.65rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }} />
+                                                    </div>
+                                                </div>
+
+                                                {costePreview > 0 && (
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 0.75rem', background: 'rgba(245,158,11,0.1)', borderRadius: '8px', border: '1px solid rgba(245,158,11,0.25)' }}>
+                                                        <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Total</span>
+                                                        <span style={{ fontSize: '1rem', fontWeight: '800', color: '#f59e0b' }}>€{costePreview.toFixed(2)}</span>
+                                                    </div>
+                                                )}
+
+                                                <div>
+                                                    <label style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>Km del vehículo <span style={{ color: '#374151' }}>(opcional)</span></label>
+                                                    <input type="number" min="0" placeholder="125000"
+                                                        value={refuelData.kmActual}
+                                                        onChange={e => setRefuelData(d => ({ ...d, kmActual: e.target.value }))}
+                                                        style={{ width: '100%', padding: '0.65rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }} />
+                                                </div>
+
+                                                <div>
+                                                    <label style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>Estación <span style={{ color: '#374151' }}>(opcional)</span></label>
+                                                    <input type="text" placeholder="Ej: Repsol Autovía A-3"
+                                                        value={refuelData.estacion}
+                                                        onChange={e => setRefuelData(d => ({ ...d, estacion: e.target.value }))}
+                                                        style={{ width: '100%', padding: '0.65rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }} />
+                                                </div>
+
+                                                <button
+                                                    onClick={registrarRepostaje}
+                                                    style={{ width: '100%', padding: '0.875rem', background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#000', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.875rem', cursor: 'pointer' }}
+                                                >
+                                                    ✓ Confirmar Repostaje
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
 
                             {/* SOS */}
                             <button

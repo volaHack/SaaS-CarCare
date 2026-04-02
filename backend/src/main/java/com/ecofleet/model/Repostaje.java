@@ -19,4 +19,14 @@ public class Repostaje {
 
     // En Mongo almacenamos el ID del vehiculo como referencia
     private String vehiculoId;
+
+    // Conductor que realizó el repostaje (opcional, para trazabilidad)
+    private String conductorId;
+    private String conductorNombre;
+
+    // Estación de servicio (opcional)
+    private String estacion;
+
+    // Notas adicionales (opcional)
+    private String notas;
 }
