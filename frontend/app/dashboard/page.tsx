@@ -358,6 +358,17 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
+
+    // Cargar KPIs de costes en background (no bloquea el render principal)
+    try {
+      const resKpis = await fetch(`${API_URL}/api/reportes/flota/kpis`, { headers: getAuthHeaders() });
+      if (resKpis.ok) {
+        const dataKpis = await resKpis.json();
+        setFlotaKpis(dataKpis);
+      }
+    } catch {
+      // silencioso — no crítico para la vista principal
+    }
   }, [getAuthHeaders]);
 
   useEffect(() => {
@@ -670,7 +681,7 @@ export default function Dashboard() {
                       }}
                     />
                   </div>
-                  <div style={{ marginTop: '1rem' }}>
+                  <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                     {(() => {
                       const estaOcupado = rutas.some(r => r.vehiculoId === v.id && r.estado !== 'COMPLETADA');
                       return (
@@ -683,6 +694,22 @@ export default function Dashboard() {
                           }}
                         >
                           {!v.activo ? "TALLER" : (estaOcupado ? "OCUPADO" : "ACTIVO")}
+                        </span>
+                      );
+                    })()}
+                    {(() => {
+                      const kpi = flotaKpis?.vehiculos.find(k => k.vehiculoId === v.id);
+                      if (!kpi || kpi.costePorKm <= 0) return null;
+                      const esEficiente = kpi.costePorKm <= (flotaKpis?.costePorKmFlota || Infinity);
+                      return (
+                        <span
+                          className={styles.badge}
+                          style={{
+                            backgroundColor: esEficiente ? 'rgba(96, 165, 250, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                            color: esEficiente ? '#60a5fa' : '#f87171',
+                          }}
+                        >
+                          €{kpi.costePorKm.toFixed(2)}/km
                         </span>
                       );
                     })()}
